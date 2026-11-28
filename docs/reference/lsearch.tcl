@@ -37,7 +37,7 @@ command lsearch {
     error "lsearch \"a \{b\" a" {unmatched open brace in list} {TCL VALUE LIST BRACE}
     release {Tcl 9.1 has the option `-stride`.}
     difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
-    difference {In Tcl 9.0.4 the message of a bad regular expression starts with `cannot compile` ([issue 668](https://github.com/beetlebugorg/ztcl/issues/668)).}
+    release {In Tcl 9.1 the message of a bad regular expression starts with `cannot compile`, and in Tcl 8.6 with `couldn't compile`.}
     release {With `-subindices -inline` and no `-all`, Tcl 8.6 gives the whole element and Tcl 9.1 gives the subelement. With `-all` both give the subelements.}
 
     option -glob {
@@ -62,7 +62,8 @@ command lsearch {
         description {Matches an element that has a match of the regular expression PATTERN anywhere in it, with the rules of `regexp`. Anchor it with `^` and `$` for a match of the whole element.}
         example {lsearch -regexp {abc xyz} {^x}} 1
         example {lsearch -regexp -nocase {ABC} {^a}} 0
-        error {lsearch -regexp {abc} (} {couldn't compile regular expression pattern: parentheses () not balanced} {REGEXP REG_EPAREN {parentheses () not balanced}}
+        error {lsearch -regexp {abc} (} {couldn't compile regular expression pattern: parentheses () not balanced} {REGEXP REG_EPAREN {parentheses () not balanced}} -tcl 8.6
+        error {lsearch -regexp {abc} (} {cannot compile regular expression pattern: parentheses () not balanced} {REGEXP REG_EPAREN {parentheses () not balanced}} -tcl 9.1
     }
     option -sorted {
         type flag

@@ -394,7 +394,8 @@ const Parser = struct {
     fn fail(p: *Parser, code: []const u8) Error {
         const a = p.it.alloc();
         const text = faultText(code);
-        p.it.result = .{ .str = try std.fmt.allocPrint(a, "couldn't compile regular expression pattern: {s}", .{text}) };
+        const head = if (p.it.tcl9()) "cannot" else "couldn't";
+        p.it.result = .{ .str = try std.fmt.allocPrint(a, "{s} compile regular expression pattern: {s}", .{ head, text }) };
         p.it.error_code = try value.newList(a, &.{ .{ .str = "REGEXP" }, .{ .str = code }, .{ .str = text } });
         return error.TclError;
     }

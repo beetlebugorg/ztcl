@@ -311,3 +311,45 @@ test "coroinject and coroprobe in 9.1" {
         \\list [catch {coroprobe f set}] [f] [coroprobe f set i]
     ));
 }
+
+test "lset: an index past the end in each release, and an add at each level" {
+    try check(0, &.{
+        .{ "set l {a b}; catch {lset l 5 c} m o; list $m [dict get $o -errorcode]", "{list index out of range} {TCL OPERATION LSET BADINDEX}", "{index \"5\" out of range} {TCL VALUE INDEX OUTOFRANGE}" },
+        .{ "set l {a b}; catch {lset l end+2 c} m; set m", "list index out of range", "index \"end+2\" out of range" },
+        .{ "set l {a {b c}}; catch {lset l 1 3 x} m; set m", "list index out of range", "index \"3\" out of range" },
+        .{ "set l {a b c}; lset l 3 0 c", "a b c c", "a b c c" },
+        .{ "set l {a {b c}}; lset l 1 2 0 x", "a {b c x}", "a {b c x}" },
+        .{ "set l {}; lset l 0 0 0 x", "x", "x" },
+        .{ "set l {a}; lset l {1 0} x", "a x", "a x" },
+    });
+}
+
+test "string last and a bad regular expression: the messages of each release" {
+    try check(0, &.{
+        .{ "string last a", "!wrong # args: should be \"string last needleString haystackString ?startIndex?\"", "!wrong # args: should be \"string last needleString haystackString ?lastIndex?\"" },
+        .{ "string first a", "!wrong # args: should be \"string first needleString haystackString ?startIndex?\"", "!wrong # args: should be \"string first needleString haystackString ?startIndex?\"" },
+        .{ "regexp {(} x", "!couldn't compile regular expression pattern: parentheses () not balanced", "!cannot compile regular expression pattern: parentheses () not balanced" },
+        .{ "regsub {(} x y", "!couldn't compile regular expression pattern: parentheses () not balanced", "!cannot compile regular expression pattern: parentheses () not balanced" },
+        .{ "lsearch -regexp {a} (", "!couldn't compile regular expression pattern: parentheses () not balanced", "!cannot compile regular expression pattern: parentheses () not balanced" },
+    });
+}
+
+test "dict map, dict incr, and string map -nocase as in Tcl" {
+    try check(0, &.{
+        .{ "dict map {k v} {a 1} {set k z; set v}", "z 1", "z 1" },
+        .{ "dict map {k v} {a 1 b 2} {set k z}", "z z", "z z" },
+        .{ "dict map {k v} {a 1 b 2} {if {$k eq \"a\"} continue; set v}", "b 2", "b 2" },
+        .{ "dict map {k v} {a 1 b 2} {unset k; set v}", "!can't read \"k\": no such variable", "!can't read \"k\": no such variable" },
+        .{ "set d {}; dict incr d m 0x10", "m 0x10", "m 0x10" },
+        .{ "set d {}; dict incr d m 010", "m 010", "m 010" },
+        .{ "set d {}; dict incr d m", "m 1", "m 1" },
+        .{ "set d {}; dict incr d m 0x10; dict incr d m", "m 17", "m 17" },
+        .{ "set d {m 1}; dict incr d m 0x10", "m 17", "m 17" },
+        .{ "set d {}; dict incr d m abc", "!expected integer but got \"abc\"", "!expected integer but got \"abc\"" },
+        .{ "string map -nocase {\u{e9} E} \u{c9}", "E", "E" },
+        .{ "string map -nocase {\u{3a3} x} \u{3c3}\u{3c2}", "x\u{3c2}", "x\u{3c2}" },
+        .{ "string map -nocase {\u{1c5} x} \u{1c6}\u{1c4}", "xx", "xx" },
+        .{ "string map -nocase {ab X} aBAbc", "XXc", "XXc" },
+        .{ "string map -nocase {\u{e9} E} a\u{e9}\u{c9}b", "aEEb", "aEEb" },
+    });
+}

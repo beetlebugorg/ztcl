@@ -244,7 +244,7 @@ command string {
             LAST is `end` by default. A LAST past the end counts as `end`, and a LAST below 0 gives -1. An empty NEEDLE gives -1.
         }
         returns {The index of the match, or -1 when HAYSTACK has no match.}
-        difference {In Tcl 9.0.4 the message of a wrong count of arguments names the third argument `?lastIndex?` ([issue 662](https://github.com/beetlebugorg/ztcl/issues/662)).}
+        release {In Tcl 9.1 the message of a wrong count of arguments names the third argument `?lastIndex?`, and in Tcl 8.6 `?startIndex?`.}
         see {{string first} lsearch}
         argument NEEDLE {
             type string
@@ -264,7 +264,8 @@ command string {
         example {string last ab xxabab 3} 2
         example {string last ab xxabab 1} -1
         example {string last ab xxabab 100} 4
-        error {string last a} {wrong # args: should be "string last needleString haystackString ?startIndex?"} {TCL WRONGARGS}
+        error {string last a} {wrong # args: should be "string last needleString haystackString ?startIndex?"} {TCL WRONGARGS} -tcl 8.6
+        error {string last a} {wrong # args: should be "string last needleString haystackString ?lastIndex?"} {TCL WRONGARGS} -tcl 9.1
         error {string last a abc x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
     }
 
@@ -414,7 +415,6 @@ command string {
             The order of MAPPING matters when one key is a prefix of another: put the longer key first. A key that is an empty string never matches. An empty MAPPING or an empty STRING gives STRING.
         }
         returns {The new string.}
-        difference {Tcl 8.6.16 and 9.0.4 fold each letter with a case with `-nocase`: `string map -nocase {é E} É` gives `E` there ([issue 659](https://github.com/beetlebugorg/ztcl/issues/659)).}
         see {regsub {string replace} dict}
         argument MAPPING {
             type list
@@ -434,12 +434,13 @@ command string {
         error {string map {a 1} abc extra} {bad option "a 1": must be -nocase} {TCL LOOKUP INDEX option} -note {With three arguments, the first one is an option.}
         option -nocase {
             type flag
-            summary {Matches the keys with no regard to the case of ASCII letters.}
+            summary {Matches the keys with no regard to the case of letters.}
             description {
-                Matches a key at a place when the two are equal with no regard to the case of the ASCII letters A to Z. The value goes out as it is in MAPPING. In ztcl the option does not fold a letter outside ASCII: the key `é` does not match `É`.
+                Matches a key at a place when the two are equal after a change of each letter to lowercase, also for letters outside ASCII, as `string equal -nocase` compares. The value goes out as it is in MAPPING.
             }
             example {string map -nocase {ab X} "AB aB"} {X X}
-            example {string map -nocase {é E} "É"} {É}
+            example {string map -nocase {é E} "É"} E
+            example {string map -nocase {Σ x} "σς"} xς -note {The lowercase of `Σ` is `σ`. The final form `ς` is another letter.}
             error {string map -nocase {a} abc} {char map list unbalanced} NONE
         }
     }
