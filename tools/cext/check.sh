@@ -27,7 +27,9 @@ for n in $names; do
   # The script reads the folder of the packages from $dir.
   { echo "set dir $out"; cat "$root/tests/cext/$n.tcl"; } > "$out/$n.tcl"
   "$tclsh" "$out/$n.tcl" > "$out/$n.want" 2>&1 || true
-  "$ztcl" --allow cext,package,channels,interp,event "$out/$n.tcl" > "$out/$n.got" 2>&1 || true
+  # The tclsh of the comparison is Tcl 8.6, and the runner follows 9.1
+  # by default.
+  "$ztcl" --tcl 8.6 --allow cext,package,channels,interp,event "$out/$n.tcl" > "$out/$n.got" 2>&1 || true
   if diff -u "$out/$n.want" "$out/$n.got" > "$out/$n.diff"; then
     echo "$n: ok ($(wc -l < "$out/$n.want") lines)"
   else

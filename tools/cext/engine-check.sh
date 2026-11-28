@@ -69,7 +69,9 @@ proc load {file args} {
 EOT
     cat "$out/$n.tcl"
   } > "$out/$n.ztcl"
-  "$ztcl" --allow file,channels,event "$out/$n.ztcl" > "$out/$n.got" 2>&1 || true
+  # The tclsh of the comparison is Tcl 8.6, and the runner follows 9.1
+  # by default.
+  "$ztcl" --tcl 8.6 --allow file,channels,event "$out/$n.ztcl" > "$out/$n.got" 2>&1 || true
   if diff -u "$out/$n.want" "$out/$n.got" > "$out/$n.diff"; then
     echo "$n: ok ($(wc -l < "$out/$n.want") lines)"
   else

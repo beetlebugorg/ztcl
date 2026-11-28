@@ -14,6 +14,9 @@ const tcl = await Interp.create(readFileSync(lib), {
   onOutput: (t) => process.stdout.write(t),
   // `after`, `update`, and background errors, as check.sh allows.
   allow: ["event"],
+  // The tclsh of the comparison is Tcl 8.6, and the library follows 9.1
+  // by default: `tcl_precision` exists only in 8.6.
+  tcl: "8.6",
   // A missing file gives the text of dlopen on Linux, as tclsh does.
   packages: (file) => {
     const wasm = file.replace(/\.so$/, ".wasm");
