@@ -17,7 +17,6 @@ command file {
     }
     returns {The result of the subcommand.}
     see {open glob cd pwd {file channels} chan}
-    difference {Links, the attributes of a file, and a new time with `atime` and `mtime` are errors in ztcl ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
     difference {Many errors have `-errorcode NONE` or a shorter code, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL WRONGARGS` or `TCL LOOKUP SUBCOMMAND` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     example {file join notes 2026 a.json} notes/2026/a.json
     example {file extension notes.json} .json
@@ -384,41 +383,59 @@ command file {
     }
 
     subcommand mtime {
-        synopsis {file mtime NAME}
+        synopsis {file mtime NAME ?TIME?}
         summary {Gives the time of the last change of a file, in seconds.}
-        description {Gives the time of the last change of the content of NAME, in seconds since 1970-01-01 UTC. A missing file is an error. A new time as a second argument is an error in ztcl.}
+        description {Gives the time of the last change of the content of NAME, in seconds since 1970-01-01 UTC. With TIME, in seconds, it sets that time first and gives it, and the other time of the file stays. A missing file is an error. In the root folder a new time of a symbolic link goes to the link itself.}
         returns {An integer of seconds.}
         see {{file atime} {file stat} clock}
-        difference {Tcl 8.6.16 and 9.0.4 set the time with `file mtime NAME TIME` ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
         argument NAME {
             type path
             summary {The path.}
+        }
+        argument TIME {
+            type integer
+            optional
+            summary {The new time, in seconds since 1970-01-01 UTC.}
         }
         example {
             set f [open n.txt w]; close $f
             expr {[file mtime n.txt] > 0}
         } 1
         error {file mtime nope.txt} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}}
-        error {file mtime n.txt 1700000000} {file mtime with a new time is not available} NONE
+        example {
+            set f [open n.txt w]; close $f
+            list [file mtime n.txt 1700000000] [file mtime n.txt]
+        } {1700000000 1700000000}
+        error {file mtime n.txt x} {expected integer but got "x"} {TCL VALUE NUMBER}
+        error {file mtime} {wrong # args: should be "file mtime name ?time?"} {TCL WRONGARGS}
     }
 
     subcommand atime {
-        synopsis {file atime NAME}
+        synopsis {file atime NAME ?TIME?}
         summary {Gives the time of the last read of a file, in seconds.}
-        description {Gives the time of the last access to NAME, in seconds since 1970-01-01 UTC. A missing file is an error. A new time as a second argument is an error in ztcl.}
+        description {Gives the time of the last access to NAME, in seconds since 1970-01-01 UTC. With TIME, in seconds, it sets that time first and gives it, and the other time of the file stays. A missing file is an error. In the root folder a new time of a symbolic link goes to the link itself.}
         returns {An integer of seconds.}
         see {{file mtime} {file stat}}
-        difference {Tcl 8.6.16 and 9.0.4 set the time with `file atime NAME TIME` ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
         argument NAME {
             type path
             summary {The path.}
+        }
+        argument TIME {
+            type integer
+            optional
+            summary {The new time, in seconds since 1970-01-01 UTC.}
         }
         example {
             set f [open n.txt w]; close $f
             expr {[file atime n.txt] > 0}
         } 1
         error {file atime nope.txt} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}}
-        error {file atime n.txt 1700000000} {file atime with a new time is not available} NONE
+        example {
+            set f [open n.txt w]; close $f
+            list [file atime n.txt 1700000000] [file atime n.txt]
+        } {1700000000 1700000000}
+        error {file atime n.txt x} {expected integer but got "x"} {TCL VALUE NUMBER}
+        error {file atime} {wrong # args: should be "file atime name ?time?"} {TCL WRONGARGS}
     }
 
     subcommand stat {
@@ -477,20 +494,38 @@ command file {
 
     subcommand attributes {
         synopsis {file attributes NAME ?OPTION ?VALUE ...??}
-        summary {Gives or sets the attributes of the platform of a file; not available in ztcl.}
-        description {In Tcl, the attributes of the platform, such as `-permissions` on Unix or `-hidden` on Windows. In ztcl each call is an error.}
-        returns {An error in ztcl.}
+        summary {Gives or sets the owner, the group, and the permissions of a file.}
+        description {
+            With NAME only, gives a list of `-group`, `-owner`, and `-permissions` and their values. With one OPTION, gives its value. With pairs of OPTION and VALUE, sets each one. A unique prefix of an option is enough.
+
+            `-permissions` is the mode in octal with a leading 0, such as `00644`. A new value is an octal number, nine characters such as `rw-r-----`, or changes such as `u+x,go-w`. `-owner` and `-group` are names from `/etc/passwd` and `/etc/group` in host mode, and numbers in the root folder. In the root folder a change of a symbolic link is an error. This version has these attributes on Linux and macOS, and Windows has none.
+        }
+        returns {The list of the attributes, the value of one, or an empty string.}
         see {{file stat}}
-        difference {Tcl 8.6.16 and 9.0.4 have the attributes of the platform ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
         argument NAME {
             type path
             summary {The path.}
         }
         example {
             set f [open n.txt w]; close $f
-            catch {file attributes n.txt}
-        } 1
-        error {file attributes n.txt} {file attributes is not available} NONE
+            file attributes n.txt -permissions 0640
+            list mode [file attributes n.txt -perm]
+        } {mode 00640}
+        example {
+            set f [open n.txt w]; close $f
+            file attributes n.txt -permissions rw-------
+            file attributes n.txt -permissions u+x,g+r
+            list mode [file attributes n.txt -permissions]
+        } {mode 00740}
+        error {file attributes nope.txt} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}}
+        error {
+            set f [open n.txt w]; close $f
+            file attributes n.txt -bogus
+        } {bad option "-bogus": must be -group, -owner, or -permissions} {TCL LOOKUP INDEX option -bogus}
+        error {
+            set f [open n.txt w]; close $f
+            file attributes n.txt -permissions zz
+        } {unknown permission string format "zz"} {TCL VALUE PERMISSION}
     }
 
     subcommand copy {
@@ -660,11 +695,14 @@ command file {
 
     subcommand link {
         synopsis {file link ?-symbolic|-hard? LINK ?TARGET?}
-        summary {Makes a link, or gives the target of a link; not available in ztcl.}
-        description {In Tcl, makes LINK point at TARGET, or gives the target of LINK. In ztcl each call is an error.}
-        returns {An error in ztcl.}
+        summary {Makes a link, or gives the target of a link.}
+        description {
+            With TARGET, makes LINK point at TARGET and gives TARGET: a symbolic link with `-symbolic`, a hard link with `-hard`, and else a symbolic link, or a hard link when the system makes no symbolic one. LINK must not exist, and TARGET must. With no TARGET, gives the target of the symbolic link LINK, as `file readlink` does.
+
+            Host mode makes links. The root folder makes none: each open there refuses a symbolic link, so a link has no use there. This version has links on Linux and macOS.
+        }
+        returns {TARGET, or the target of LINK.}
         see {{file readlink}}
-        difference {Tcl 8.6.16 and 9.0.4 make links ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
         argument LINK {
             type path
             summary {The path of the link.}
@@ -675,22 +713,32 @@ command file {
             summary {The path that the link points at.}
         }
         example {catch {file link -symbolic lnk n.txt}} 1
-        error {file link -symbolic lnk n.txt} {could not link: links are not available in the root folder} {POSIX EACCES {permission denied}}
+        error {file link -symbolic lnk n.txt} {could not create new link "lnk": links are not available in the root folder} {POSIX EACCES {permission denied}}
+        error {file link -bogus a b} {bad option "-bogus": must be -symbolic or -hard} {TCL LOOKUP INDEX option -bogus}
+        error {file link} {wrong # args: should be "file link ?-linktype? linkname ?target?"} {TCL WRONGARGS}
     }
 
     subcommand readlink {
         synopsis {file readlink NAME}
-        summary {Gives the target of a symbolic link; not available in ztcl.}
-        description {In Tcl, gives the path that the link NAME points at. In ztcl each call is an error.}
-        returns {An error in ztcl.}
+        summary {Gives the target of a symbolic link.}
+        description {
+            Gives the path that the symbolic link NAME points at, in host mode. A file that is not a link is an error. In the root folder each name is a file that is not a link, so the text of a link of the host stays hidden.
+        }
+        returns {The target of the link.}
         see {{file link}}
-        difference {Tcl 8.6.16 and 9.0.4 read links ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
         argument NAME {
             type path
             summary {The path of the link.}
         }
-        example {catch {file readlink n.txt}} 1
-        error {file readlink n.txt} {could not readlink: links are not available in the root folder} {POSIX EACCES {permission denied}}
+        example {
+            set f [open n.txt w]; close $f
+            catch {file readlink n.txt}
+        } 1
+        error {
+            set f [open n.txt w]; close $f
+            file readlink n.txt
+        } {could not read link "n.txt": invalid argument} {POSIX EINVAL {invalid argument}}
+        error {file readlink nope.txt} {could not read link "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}}
     }
 
     subcommand home {

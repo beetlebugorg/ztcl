@@ -18,6 +18,7 @@ const fsroot = @import("fsroot.zig");
 const sys = @import("sys.zig");
 const cmds = @import("cmds.zig");
 const vfs = @import("vfs.zig");
+const fileattr = @import("fileattr.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -703,9 +704,9 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const rel = try fsroot.need(it, try one(it, s, args));
         return .{ .str = try fsroot.shown(it, rel) };
     }
-    if (eql(s, "link") or eql(s, "readlink")) {
-        return it.failCode("POSIX EACCES {permission denied}", "could not {s}: links are not available in the root folder", .{s});
-    }
+    if (eql(s, "link")) return fileattr.link(it, args);
+    if (eql(s, "readlink")) return fileattr.readLink(it, try one(it, s, args));
+    if (eql(s, "attributes")) return fileattr.attributes(it, args);
     if (eql(s, "exists") or eql(s, "isfile") or eql(s, "isdirectory") or eql(s, "readable") or eql(s, "writable") or eql(s, "executable") or eql(s, "owned")) {
         const st = (try statInfo(it, try one(it, s, args))) orelse return .{ .int = 0 };
         const b = if (eql(s, "isfile")) fsroot.isFile(st.mode) else if (eql(s, "isdirectory")) fsroot.isDir(st.mode) else if (eql(s, "readable")) st.mode & 0o444 != 0 else if (eql(s, "writable")) st.mode & 0o222 != 0 else if (eql(s, "executable")) st.mode & 0o111 != 0 else true;
@@ -714,7 +715,8 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(s, "size")) return .{ .int = @intCast((try needInfo(it, try one(it, s, args), "read")).size) };
     if (eql(s, "type")) return .{ .str = typeName((try needInfoOf(it, try one(it, s, args), "read", false)).mode) };
     if (eql(s, "mtime") or eql(s, "atime")) {
-        if (args.len != 1) return it.fail("file {s} with a new time is not available", .{s});
+        if (args.len == 2) return fileattr.setTime(it, s, try it.str(args[0]), args[1]);
+        if (args.len != 1) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"file {s} name ?time?\"", .{s});
         const st = try needInfo(it, try one(it, s, args), "read");
         return .{ .int = if (eql(s, "mtime")) st.mtime else st.atime };
     }

@@ -4189,3 +4189,64 @@ test "file type and file lstat of a symbolic link in host mode give the link, as
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("n.txt", linux.AT.FDCWD, lnk)));
     try std.testing.expectEqualStrings("link file link file", try it.str(try it.eval("file lstat $d/lnk l; file stat $d/lnk s; list [file type $d/lnk] [file type $d/n.txt] $l(type) $s(type)")));
 }
+
+test "file link, readlink, attributes, and a new mtime and atime in host mode and the root folder" {
+    if (!tcl.fileattr.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    _ = try it.eval("set d [file join [pwd] .zig-cache ztcl-attr-test]; file delete -force $d; file mkdir $d; close [open $d/n.txt w]");
+    defer _ = it.eval("file delete -force $d") catch {};
+    const top = try std.testing.allocator.dupe(u8, try it.str(try it.eval("pwd")));
+    defer std.testing.allocator.free(top);
+    try std.testing.expectEqualStrings("1700000000 1600000000 1700000000", try it.str(try it.eval("list [file mtime $d/n.txt 1700000000] [file atime $d/n.txt 1600000000] [file mtime $d/n.txt]")));
+    try std.testing.expectEqualStrings("00600 00640 00744", try it.str(try it.eval("file attributes $d/n.txt -permissions 0600; set r [file attributes $d/n.txt -perm]; file attributes $d/n.txt -permissions rw-r-----; lappend r [file attributes $d/n.txt -permissions]; file attributes $d/n.txt -permissions u+wx,o+r; lappend r [file attributes $d/n.txt -permissions]")));
+    try std.testing.expectEqualStrings("-group -owner -permissions", try it.str(try it.eval("dict keys [file attributes $d/n.txt]")));
+    try std.testing.expectEqualStrings("n.txt n.txt n.txt", try it.str(try it.eval("cd $d; list [file link -symbolic lnk n.txt] [file readlink lnk] [file link lnk]")));
+    try std.testing.expectEqualStrings("n.txt 2", try it.str(try it.eval("list [file link -hard h n.txt] [file stat n.txt s; set s(nlink)]")));
+    const errs = [_][3][]const u8{
+        .{ "file link -symbolic lnk n.txt", "could not create new link \"lnk\": that path already exists", "POSIX EEXIST {file already exists}" },
+        .{ "file link -symbolic l2 nope.txt", "could not create new link \"l2\": target \"nope.txt\" doesn't exist", "POSIX ENOENT {no such file or directory}" },
+        .{ "file readlink n.txt", "could not read link \"n.txt\": invalid argument", "POSIX EINVAL {invalid argument}" },
+        .{ "file link -bogus a b", "bad option \"-bogus\": must be -symbolic or -hard", "TCL LOOKUP INDEX option -bogus" },
+        .{ "file attributes n.txt -bogus", "bad option \"-bogus\": must be -group, -owner, or -permissions", "TCL LOOKUP INDEX option -bogus" },
+        .{ "file attributes n.txt -permissions zz", "unknown permission string format \"zz\"", "TCL VALUE PERMISSION" },
+        .{ "file attributes n.txt -owner nosuchuserx", "could not set owner for file \"n.txt\": user \"nosuchuserx\" does not exist", "TCL OPERATION SETOWN NO_USER" },
+        .{ "file mtime nope.txt 5", "could not read \"nope.txt\": no such file or directory", "POSIX ENOENT {no such file or directory}" },
+    };
+    for (errs) |c| {
+        try std.testing.expectError(error.TclError, it.eval(c[0]));
+        try std.testing.expectEqualStrings(c[1], try it.str(it.result));
+        try std.testing.expectEqualStrings(c[2], try it.str(it.error_code));
+    }
+    // A symbolic link of the host in a root folder, to a file outside it.
+    _ = try it.eval("close [open out.txt w]; file attributes out.txt -permissions 0644; file mkdir jail; file link -symbolic jail/esc [file join [pwd] out.txt]");
+    // The root folder makes no links and shows the text of none.
+    _ = try it.eval("cd ../..");
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-attr-test");
+    try std.testing.expectError(error.TclError, it.eval("file link -symbolic l3 n.txt"));
+    try std.testing.expectEqualStrings("could not create new link \"l3\": links are not available in the root folder", try it.str(it.result));
+    try std.testing.expectError(error.TclError, it.eval("file readlink lnk"));
+    try std.testing.expectEqualStrings("could not read link \"lnk\": invalid argument", try it.str(it.result));
+    try std.testing.expectEqualStrings("1700000000", try it.str(try it.eval("file mtime n.txt 1700000000")));
+    // A change through a symbolic link of the host stays inside the root.
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-attr-test/jail");
+    try std.testing.expectError(error.TclError, it.eval("file attributes esc -permissions 0600"));
+    try std.testing.expect(std.mem.endsWith(u8, try it.str(it.result), ": permission denied"));
+    // The path of a kernel with no fchmodat2: a descriptor with O_PATH
+    // and O_NOFOLLOW, and the /proc/self/fd name of it.
+    if (@import("builtin").os.tag == .linux) {
+        tcl.fileattr.test_no_fchmodat2 = true;
+        defer tcl.fileattr.test_no_fchmodat2 = false;
+        try std.testing.expectError(error.TclError, it.eval("file attributes esc -permissions 0600"));
+        try std.testing.expect(std.mem.endsWith(u8, try it.str(it.result), ": permission denied"));
+        try std.testing.expectEqualStrings("00700", try it.str(try it.eval("close [open in.txt w]; file attributes in.txt -permissions 0700; file attributes in.txt -permissions")));
+    }
+    // A new time goes to the link itself.
+    try std.testing.expectEqualStrings("5", try it.str(try it.eval("file mtime esc 5")));
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-attr-test");
+    try std.testing.expectEqualStrings("00644", try it.str(try it.eval("file attributes out.txt -permissions")));
+    try std.testing.expect(!std.mem.eql(u8, "5", try it.str(try it.eval("file mtime out.txt"))));
+}

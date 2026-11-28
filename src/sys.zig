@@ -116,6 +116,31 @@ const darwin = struct {
         return ret(c.symlinkat(target, dir, path));
     }
 
+    pub fn linkat(from: i32, old: [*:0]const u8, to: i32, new: [*:0]const u8, flags: u32) usize {
+        return ret(c.linkat(from, old, to, new, @intCast(flags)));
+    }
+
+    pub fn readlinkat(dir: i32, path: [*:0]const u8, buf: [*]u8, n: usize) usize {
+        return ret(c.readlinkat(dir, path, buf, n));
+    }
+
+    pub fn utimensat(dir: i32, path: [*:0]const u8, times: *const [2]timespec, flags: u32) usize {
+        return ret(c.utimensat(dir, path, times, flags));
+    }
+
+    /// `fchmodat` with flags, such as `AT.SYMLINK_NOFOLLOW`.
+    pub fn fchmodat2(dir: i32, path: [*:0]const u8, mode: c.mode_t, flags: u32) usize {
+        return ret(c.fchmodat(dir, path, mode, @intCast(flags)));
+    }
+
+    pub fn fchownat(dir: i32, path: [*:0]const u8, uid: c.uid_t, gid: c.gid_t, flags: u32) usize {
+        return ret(c.fchownat(dir, path, uid, gid, @intCast(flags)));
+    }
+
+    pub fn getuid() u32 {
+        return c.getuid();
+    }
+
     // `std.c` links the forms with 64-bit inodes on x86-64 macOS
     // (`fstat$INODE64` and the others), which have the layout of `c.Stat`
     // and `c.dirent`. The plain names there have the old layout.
