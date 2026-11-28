@@ -751,7 +751,7 @@ fn objPrintfVA(fmt: [*:0]const u8, ap: *obj.va.VaList) callconv(.c) *Obj {
 }
 
 comptime {
-    if (obj.va.own) {
+    if (obj.va.exports) {
         obj.va.exportBody(&appendPrintfToObjVA, "ztcl_va_AppendPrintfToObj");
         obj.va.exportBody(&objPrintfVA, "ztcl_va_ObjPrintf");
     }

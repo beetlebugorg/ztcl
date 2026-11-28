@@ -1251,7 +1251,7 @@ pub fn panicText(msg: []const u8) noreturn {
 }
 
 comptime {
-    if (va.own) {
+    if (va.exports) {
         va.exportBody(&Tcl_AppendResultVA, "ztcl_va_AppendResult");
         va.exportBody(&Tcl_AppendStringsToObjVA, "ztcl_va_AppendStringsToObj");
     }
