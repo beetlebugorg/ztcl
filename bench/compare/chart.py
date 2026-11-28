@@ -6,7 +6,7 @@ Run: python3 -I bench/compare/chart.py [OUT_DIR [RESULTS]]
 It writes FAMILY-light.svg and FAMILY-dark.svg for each task family to
 OUT_DIR (default: docs/site/bench/). Each chart has one panel for each
 task, with one bar for each language. A bar is the median, and the
-whisker is the interquartile range. A hollow bar is a noisy value: its
+whisker is the interquartile range. A pale bar with a dashed edge is a noisy value: its
 interquartile range is more than 10 % of its median. A panel uses a log
 scale only when its largest bar is more than 30 times its smallest, and
 its axis says so. It uses only the standard library of Python.
@@ -100,6 +100,12 @@ def fmt(v):
     return "%.2f" % v
 
 
+def tick(v):
+    if v >= 1000:
+        return "{:,}".format(int(round(v)))
+    return ("%.2f" % v).rstrip("0").rstrip(".") or "0"
+
+
 def nice_max(v):
     e = math.floor(math.log10(v))
     for m in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10):
@@ -125,6 +131,8 @@ def panel(x0, y0, task, data, missing, t):
     out.append(f'<text x="{x0}" y="{y0 + 36}" font-size="12" fill="{t["muted"]}">{esc(axis)}</text>')
     if log:
         lo = 10 ** math.floor(math.log10(min(vals)))
+        if min(vals) / lo < 3:
+            lo /= 10
         hi = 10 ** math.ceil(math.log10(hi_all * 1.05))
         def py(v):
             return top + height - height * (math.log10(max(v, lo)) - math.log10(lo)) / (math.log10(hi) - math.log10(lo))
@@ -137,7 +145,7 @@ def panel(x0, y0, task, data, missing, t):
     for v in ticks:
         y = py(v)
         out.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left + width}" y2="{y:.1f}" stroke="{t["grid"]}" stroke-width="1"/>')
-        out.append(f'<text x="{left - 6}" y="{y + 4:.1f}" font-size="11" text-anchor="end" fill="{t["muted"]}">{fmt(v) if v else "0"}</text>')
+        out.append(f'<text x="{left - 6}" y="{y + 4:.1f}" font-size="11" text-anchor="end" fill="{t["muted"]}">{tick(v)}</text>')
     n = len(LANGS)
     slot = width / n
     bw = slot * 0.62
@@ -155,7 +163,7 @@ def panel(x0, y0, task, data, missing, t):
         noisy = (d["q3"] - d["q1"]) / d["med"] > NOISY
         h = max(base - y, 1.5)
         if noisy:
-            out.append(f'<rect x="{cx - bw / 2:.1f}" y="{base - h:.1f}" width="{bw:.1f}" height="{h:.1f}" fill="{t["bg"]}" stroke="{color}" stroke-width="2" stroke-dasharray="4 3"/>')
+            out.append(f'<rect x="{cx - bw / 2:.1f}" y="{base - h:.1f}" width="{bw:.1f}" height="{h:.1f}" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="2" stroke-dasharray="4 3"/>')
         else:
             out.append(f'<rect x="{cx - bw / 2:.1f}" y="{base - h:.1f}" width="{bw:.1f}" height="{h:.1f}" fill="{color}"/>')
         y1, y3 = py(d["q1"]), py(d["q3"])
@@ -180,13 +188,14 @@ def svg(theme, fam, title, tasks, env, missing):
            f'<rect width="{W}" height="{H}" fill="{t["bg"]}"/>',
            f'<text x="{MARGIN}" y="{MARGIN + 16}" font-size="19" font-weight="700" fill="{t["fg"]}">{esc(title)}</text>',
            f'<text x="{MARGIN}" y="{MARGIN + 36}" font-size="12" fill="{t["muted"]}">The median of {rr} runs of the whole process. The whisker is the interquartile range.</text>',
-           f'<text x="{MARGIN}" y="{MARGIN + 52}" font-size="12" fill="{t["muted"]}">{esc(env.get("cpu", ""))}, {esc(env.get("date", "")[:10])}, load {esc(env.get("load_start", "?").split()[0])} at the start.</text>']
+           f'<text x="{MARGIN}" y="{MARGIN + 52}" font-size="12" fill="{t["muted"]}">{esc(env.get("cpu", "").split(",")[0])}, {esc(env.get("date", "")[:10])}, load average {esc(env.get("load_start", "?").split()[0])} to {esc(env.get("load_end", "?").split()[0])}.</text>']
     for i, task in enumerate(names):
         out += panel(MARGIN, MARGIN + 70 + i * (PH + GAP), task, tasks[task], missing, t)
     y = H - MARGIN - 22
-    out.append(f'<rect x="{MARGIN}" y="{y - 11}" width="14" height="12" fill="{t["bg"]}" stroke="{t["muted"]}" stroke-width="2" stroke-dasharray="4 3"/>')
-    out.append(f'<text x="{MARGIN + 20}" y="{y}" font-size="12" fill="{t["muted"]}">A hollow bar is noisy: its interquartile range is more than 10 % of its median.</text>')
-    out.append(f'<text x="{MARGIN + 20}" y="{y + 17}" font-size="12" fill="{t["muted"]}">n/a: the language has no program for the task. Data: bench/compare/results.tsv.</text>')
+    out.append(f'<rect x="{MARGIN}" y="{y - 11}" width="14" height="12" fill="{t["muted"]}" fill-opacity="0.35" stroke="{t["muted"]}" stroke-width="2" stroke-dasharray="4 3"/>')
+    out.append(f'<text x="{MARGIN + 20}" y="{y}" font-size="12" fill="{t["muted"]}">A pale, dashed bar is noisy: its interquartile range is over 10 % of its median.</text>')
+    na = "n/a: the language has no program for the task. " if any(k[0] in tasks for k in missing) else ""
+    out.append(f'<text x="{MARGIN + 20}" y="{y + 17}" font-size="12" fill="{t["muted"]}">{na}Data: bench/compare/results.tsv.</text>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
 

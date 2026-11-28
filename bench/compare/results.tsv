@@ -1,0 +1,97 @@
+# The results of bench/compare/run.py. One row for each task and language.
+# date	2026-11-27 22:48 EST
+# cpu	Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz, 8 logical CPUs
+# os	Linux 7.2.15-1-omarchy
+# load_start	4.4 3.4 2.7
+# ztcl	1.0.0-beta.1, a ReleaseFast build of the branch of PR #623
+# tclsh	8.6.16
+# python	Python 3.14.8
+# go	go version go1.26.3 linux/amd64
+# zig	0.17.0
+# nice	10 for each run, 19 for the builds
+# load_end	3.4 4.3 4.1
+# missing	tls	tclsh	Tcl 8.6 has no TLS in its core; the tcltls package needs OpenSSL
+# missing	json	tclsh	the core of Tcl 8.6 has no JSON parser; give tcllib with --tcllib
+task	family	lang	unit	median	q1	q3	min	max	runs
+base64	data	ztcl	ms	255.184	235.471	295.959	225.291	343.559	15
+base64	data	ztcl-nojit	ms	235.064	226.314	286.219	223.695	384.994	15
+base64	data	tclsh	ms	205.127	188.832	212.199	185.843	261.776	15
+base64	data	python	ms	90.060	82.025	106.706	80.418	144.313	15
+base64	data	go	ms	53.120	48.772	89.981	40.366	218.848	15
+base64	data	zig	ms	32.296	25.586	44.709	25.012	64.211	15
+json	data	ztcl	ms	291.919	280.834	397.437	266.645	415.607	15
+json	data	ztcl-nojit	ms	318.124	278.799	405.807	274.690	521.966	15
+json	data	python	ms	585.347	576.040	628.478	565.283	2728.617	15
+json	data	go	ms	431.513	419.257	510.329	409.527	706.680	15
+json	data	zig	ms	203.329	181.983	273.993	151.685	1519.452	15
+csv	data	ztcl	ms	1891.363	1807.311	2061.493	1752.269	2850.010	15
+csv	data	ztcl-nojit	ms	1955.912	1884.542	2224.727	1858.472	2985.966	15
+csv	data	tclsh	ms	24297.951	22754.768	26474.180	21988.375	30686.561	15
+csv	data	python	ms	1545.111	1476.228	1698.389	1402.021	3609.244	15
+csv	data	go	ms	387.979	349.879	415.328	308.259	485.545	15
+csv	data	zig	ms	105.543	103.208	119.833	102.615	139.029	15
+weblog	text	ztcl	ms	1046.070	998.442	1085.247	973.545	1737.978	15
+weblog	text	ztcl-nojit	ms	1037.984	1014.268	1127.394	973.735	1762.551	15
+weblog	text	tclsh	ms	1875.372	1826.698	1919.445	1785.311	2194.124	15
+weblog	text	python	ms	251.667	240.663	300.021	231.374	432.402	15
+weblog	text	go	ms	328.697	317.592	410.156	292.650	581.690	15
+weblog	text	zig	ms	22.317	21.349	27.487	20.171	47.545	15
+wordfreq	text	ztcl	ms	1181.661	1106.848	1356.859	1055.407	1789.647	15
+wordfreq	text	ztcl-nojit	ms	1191.866	1077.330	1262.901	1010.469	1448.112	15
+wordfreq	text	tclsh	ms	2196.152	2039.343	2627.785	2003.802	3561.465	15
+wordfreq	text	python	ms	782.052	752.326	970.281	729.345	1242.532	15
+wordfreq	text	go	ms	408.837	333.734	446.558	295.566	547.652	15
+wordfreq	text	zig	ms	83.326	80.046	87.621	75.485	127.954	15
+strfmt	text	ztcl	ms	360.415	320.702	397.781	282.740	513.461	15
+strfmt	text	ztcl-nojit	ms	318.696	302.818	350.651	286.265	540.145	15
+strfmt	text	tclsh	ms	1575.404	1489.639	1816.355	1465.161	2651.686	15
+strfmt	text	python	ms	1040.856	990.507	1214.186	975.542	1939.431	15
+strfmt	text	go	ms	439.907	418.354	512.128	382.646	813.490	15
+strfmt	text	zig	ms	88.303	85.181	112.916	83.841	205.805	15
+template	text	ztcl	ms	110.250	90.935	120.552	85.746	1157.592	15
+template	text	ztcl-nojit	ms	101.011	93.010	118.668	88.253	191.252	15
+template	text	tclsh	ms	228.923	222.603	234.613	215.410	386.651	15
+template	text	python	ms	352.225	344.308	370.300	337.409	603.064	15
+template	text	go	ms	335.417	316.955	450.212	298.428	940.703	15
+template	text	zig	ms	16.324	15.632	20.562	15.220	37.057	15
+sort_int	sort	ztcl	ms	417.754	409.337	529.753	380.084	628.741	15
+sort_int	sort	ztcl-nojit	ms	506.588	431.979	542.143	387.272	587.931	15
+sort_int	sort	tclsh	ms	586.218	570.946	606.151	538.071	664.706	15
+sort_int	sort	python	ms	597.763	561.222	674.502	523.436	1208.702	15
+sort_int	sort	go	ms	167.135	139.131	177.088	126.915	218.924	15
+sort_int	sort	zig	ms	81.087	78.561	87.030	76.039	118.691	15
+sort_str	sort	ztcl	ms	554.024	520.648	656.216	484.996	870.782	15
+sort_str	sort	ztcl-nojit	ms	596.192	516.100	669.993	488.530	889.058	15
+sort_str	sort	tclsh	ms	694.255	678.255	825.798	619.283	1975.275	15
+sort_str	sort	python	ms	577.733	548.306	602.281	508.268	889.777	15
+sort_str	sort	go	ms	336.815	305.101	353.287	297.793	458.768	15
+sort_str	sort	zig	ms	340.738	313.451	359.924	291.881	503.758	15
+http	net	ztcl	req/s	42501.000	40325.500	44832.500	37405.000	50924.000	15
+http	net	ztcl-nojit	req/s	42816.000	41055.500	46234.500	29431.000	50850.000	15
+http	net	tclsh	req/s	28440.000	27715.500	30067.500	21667.000	32269.000	15
+http	net	python	req/s	11342.000	10627.000	11608.500	10197.000	12987.000	15
+http	net	go	req/s	28580.000	27669.000	31676.000	20241.000	34361.000	15
+http	net	zig	req/s	57234.000	54167.500	58068.500	45372.000	62609.000	15
+tls	net	ztcl	ms	85.919	79.503	105.553	71.244	199.821	15
+tls	net	ztcl-nojit	ms	85.727	76.796	95.471	71.570	254.339	15
+tls	net	python	ms	82.872	78.962	91.564	74.008	114.916	15
+tls	net	go	ms	47.360	45.561	49.316	37.425	65.832	15
+tls	net	zig	ms	63.240	55.925	79.152	54.008	96.687	15
+hello	start	ztcl	ms	2.505	2.323	2.714	2.109	3.228	15
+hello	start	ztcl-nojit	ms	2.364	2.192	2.588	1.973	3.178	15
+hello	start	tclsh	ms	3.638	3.442	4.030	3.160	5.342	15
+hello	start	python	ms	13.588	13.330	14.138	12.062	16.276	15
+hello	start	go	ms	2.432	2.249	2.684	2.033	157.130	15
+hello	start	zig	ms	1.594	1.460	1.710	1.331	2.264	15
+fib	micro	ztcl	ms	90.416	88.439	93.775	87.996	171.744	15
+fib	micro	ztcl-nojit	ms	169.548	166.600	174.015	163.251	221.463	15
+fib	micro	tclsh	ms	592.378	575.809	692.203	556.857	992.718	15
+fib	micro	python	ms	125.206	117.995	146.220	115.851	206.877	15
+fib	micro	go	ms	6.772	6.157	8.624	5.749	19.184	15
+fib	micro	zig	ms	4.057	3.981	4.345	3.870	6.042	15
+nbody	micro	ztcl	ms	701.581	668.412	810.659	646.247	1146.307	15
+nbody	micro	ztcl-nojit	ms	766.341	731.309	791.003	721.884	1226.252	15
+nbody	micro	tclsh	ms	927.118	911.021	985.720	899.647	1316.925	15
+nbody	micro	python	ms	340.785	323.189	401.664	305.445	548.489	15
+nbody	micro	go	ms	6.608	6.299	8.522	6.118	36.490	15
+nbody	micro	zig	ms	3.421	3.060	3.538	2.965	5.085	15
