@@ -18,6 +18,7 @@ command string {
         The option `-grapheme` of `length`, `index`, `range`, and `reverse` counts grapheme clusters in place of characters. A grapheme cluster is what a reader sees as one character, such as `e` with a combining accent, or a flag of two regional indicators. It needs the module ztcl::text in the build, with no `package require`.
     }
     returns {The result of the subcommand.}
+    difference {Many errors have `-errorcode NONE` in ztcl, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL VALUE INDEX` or `TCL LOOKUP SUBCOMMAND`, and an error of a bad option has the code with no bad word at its end ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     see {append format scan split join regexp regsub tcl::prefix encoding}
     release {Tcl 9.1 adds `string insert` and the class `dict` of `string is`, and has no `string bytelength`.}
     release {In Tcl 9.1 an integer of `string is integer` can have `_` between its digits, such as `1_000`.}
@@ -243,6 +244,7 @@ command string {
             LAST is `end` by default. A LAST past the end counts as `end`, and a LAST below 0 gives -1. An empty NEEDLE gives -1.
         }
         returns {The index of the match, or -1 when HAYSTACK has no match.}
+        difference {In Tcl 9.0.4 the message of a wrong count of arguments names the third argument `?lastIndex?` ([issue 662](https://github.com/beetlebugorg/ztcl/issues/662)).}
         see {{string first} lsearch}
         argument NEEDLE {
             type string
@@ -412,6 +414,7 @@ command string {
             The order of MAPPING matters when one key is a prefix of another: put the longer key first. A key that is an empty string never matches. An empty MAPPING or an empty STRING gives STRING.
         }
         returns {The new string.}
+        difference {Tcl 8.6.16 and 9.0.4 fold each letter with a case with `-nocase`: `string map -nocase {é E} É` gives `E` there ([issue 659](https://github.com/beetlebugorg/ztcl/issues/659)).}
         see {regsub {string replace} dict}
         argument MAPPING {
             type list
