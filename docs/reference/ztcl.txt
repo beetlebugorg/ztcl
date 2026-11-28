@@ -1,12 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::open
-syn: ztcl::open target
-does: Opens a URL or a file in the default app of the host.
-cap: launch
-page: modules/open.md
-
 == ztcl::notify
 syn: ztcl::notify ?-option value ...? title ?body?
 does: Shows a notification of the system.
