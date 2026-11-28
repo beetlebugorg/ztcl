@@ -3983,7 +3983,7 @@ test "chan truncate, chan isbinary, and the messages of chan (#690, #692)" {
         \\puts -nonewline $f abcd; chan tr $f; close $f; lappend r [file size t.txt]
         \\set f [open t.txt r]; seek $f 2; set t [tell $f]; close $f; lappend r $t
     )));
-    try std.testing.expectEqualStrings("{unknown or ambiguous subcommand \"bogus\": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus}", try it.str(try it.eval("catch {chan bogus} m o; list $m [dict get $o -errorcode]")));
+    try std.testing.expectEqualStrings("{unknown or ambiguous subcommand \"bogus\": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus}", try it.str(try it.eval("catch {chan bogus} m o; list $m [dict get $o -errorcode]")));
     try std.testing.expectEqualStrings("wrong # args: should be \"chan close channelId ?direction?\"", try it.str(try it.eval("catch {chan close} m; set m")));
     try it.setTclVersion(.v9_1);
     try std.testing.expectEqualStrings("0 1", try it.str(try it.eval("set f [open t.txt w]; set r [chan isbinary $f]; fconfigure $f -translation binary; lappend r [chan isbinary $f]; close $f; set r")));
@@ -3996,4 +3996,69 @@ test "chan truncate, chan isbinary, and the messages of chan (#690, #692)" {
         const script = try std.fmt.allocPrint(it.alloc(), "catch {{{s}}} m; set m", .{c[0]});
         try std.testing.expectEqualStrings(c[1], try it.str(try it.eval(script)));
     }
+}
+
+test "chan create and chan postevent give the results of tclsh 8.6.16 (#690)" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.event));
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    // The script and the result come from tclsh 8.6.16.
+    const got = try it.str(try it.eval(
+        \\proc e {s} {set r [catch {uplevel 1 $s} m o]; set ec [expr {[dict exists $o -errorcode] ? [dict get $o -errorcode] : "-"}]; return [list $r $m $ec]}
+        \\set ::log {}
+        \\proc drv {cmd c args} {
+        \\    lappend ::log [list $cmd {*}$args]
+        \\    switch $cmd {
+        \\        initialize {return {initialize finalize watch read write seek configure cget cgetall blocking}}
+        \\        read {
+        \\            set n [lindex $args 0]
+        \\            set d [string range $::data 0 [expr {$n-1}]]
+        \\            set ::data [string range $::data $n end]
+        \\            return $d
+        \\        }
+        \\        write {append ::out [lindex $args 0]; return [string length [lindex $args 0]]}
+        \\        seek {return 42}
+        \\        cget {return bar}
+        \\        cgetall {return {-foo bar}}
+        \\    }
+        \\}
+        \\set ::data "line1\nline2\n"
+        \\set ::out ""
+        \\set c [chan create {read write} drv]
+        \\set r {}
+        \\lappend r [gets $c] [read $c] [eof $c]
+        \\puts -nonewline $c hello; flush $c
+        \\lappend r $::out [tell $c] [seek $c 10] [fconfigure $c -foo]
+        \\fconfigure $c -foo baz
+        \\lappend r [fconfigure $c]
+        \\fconfigure $c -blocking 0
+        \\chan event $c readable {set ::fired r}
+        \\lappend r [e {chan postevent $c read}]
+        \\update
+        \\lappend r [info exists ::fired]
+        \\chan event $c readable {}
+        \\close $c
+        \\lappend r $::log
+        \\proc d4 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch read}}; if {$cmd eq "read"} {return -code error "boom"}}
+        \\set c4 [chan create read d4]
+        \\lappend r [e {read $c4}] [e {puts $c4 x}] [e {seek $c4 1}] [e {tell $c4}] [e {chan postevent $c4 bogus}] [e {chan postevent $c4 write}] [e {chan postevent $c4 {}}]
+        \\close $c4
+        \\proc d5 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch read}}; if {$cmd eq "read"} {return [string repeat x [expr {[lindex $args 0]+1}]]}}
+        \\set c5 [chan create read d5]
+        \\lappend r [e {read $c5 3}]
+        \\close $c5
+        \\proc d6 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch write}}; if {$cmd eq "write"} {return 0}}
+        \\set c6 [chan create write d6]
+        \\lappend r [e {puts $c6 x; flush $c6}]
+        \\catch {close $c6}
+        \\proc d7 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch write}}; if {$cmd eq "write"} {return 1}; if {$cmd eq "finalize"} {return -code error fin}}
+        \\set c7 [chan create write d7]
+        \\lappend r [e {puts -nonewline $c7 abc; flush $c7}] [e {close $c7}] [e {fconfigure $c7}]
+        \\proc d {m cmd c args} {if {$cmd eq "initialize"} {return $m}; return ""}
+        \\lappend r [e {chan create write {d {initialize finalize watch read}}}] [e {chan create read {d {initialize finalize read}}}] [e {chan create read {d {initialize finalize watch read cget}}}] [e {chan create bogus d}] [e {chan create read {d {initialize finalize watch read x}}}]
+        \\set r
+    ));
+    try std.testing.expectEqualStrings("line1 {line2\n} 1 hello 42 {} bar {-blocking 1 -buffering full -buffersize 4096 -encoding utf-8 -eofchar {{} {}} -translation {auto lf} -foo bar} {0 {} -} 1 {{initialize {read write}} {read 4096} {read 4096} {write hello} {seek 0 current} {seek 10 start} {cget -foo} {configure -foo baz} cgetall {blocking 0} {watch read} {watch {}} finalize} {1 boom NONE} {1 {channel \"rc1\" wasn't opened for writing} NONE} {1 {error during seek on \"rc1\": invalid argument} {POSIX EINVAL {invalid argument}}} {0 -1 -} {1 {bad event \"bogus\": must be read or write} {TCL LOOKUP INDEX event bogus}} {1 {tried to post events channel \"rc1\" is not interested in} NONE} {1 {bad event list: is empty} NONE} {1 {read delivered more than requested} NONE} {1 {write wrote nothing} NONE} {0 {} -} {1 fin NONE} {1 {can not find channel named \"rc4\"} {TCL LOOKUP CHANNEL rc4}} {1 {chan handler \"d {initialize finalize watch read}\" lacks a \"write\" method} NONE} {1 {chan handler \"d {initialize finalize read}\" does not support all required methods} NONE} {1 {chan handler \"d {initialize finalize watch read cget}\" supports \"cget\" but not \"cgetall\"} NONE} {1 {bad mode \"bogus\": must be read or write} {TCL LOOKUP INDEX mode bogus}} {1 {chan handler \"d {initialize finalize watch read x} initialize\" returned bad method \"x\": must be blocking, cget, cgetall, configure, finalize, initialize, read, seek, watch, or write} {TCL LOOKUP INDEX method x}}", got);
 }
