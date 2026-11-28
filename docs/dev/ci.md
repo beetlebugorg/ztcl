@@ -171,6 +171,8 @@ gh variable set CI_SELF_HOSTED -R beetlebugorg/ztcl -b main
 
 The package `ztcl-ci` on GitHub must be public, so that a runner pulls it with no token: Packages, ztcl-ci, Package settings, Change visibility, Public.
 
+State on 2026-11-28: the package is public, and `CI_SELF_HOSTED` is `main` for ztcl. The runner `linux-x64-1` runs the Linux container jobs of each push to main.
+
 ### Set up a runner on a Mac
 
 The runner of GitHub runs job containers only on Linux. On a Mac, the runner runs in a Linux arm64 container of Docker Desktop, and it starts the job containers next to it through the socket of Docker Desktop. The work directory must have the same path in the runner container and in the VM of Docker Desktop. The labels are `self-hosted`, `Linux`, `ARM64`, `docker`, and `trusted`. No job of `ci.yml` uses the label `ARM64` yet: the JIT job on arm64 moves there in a later change.
