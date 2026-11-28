@@ -34,10 +34,9 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
     <div>
       <span class="pill"><b>1.0.0-beta.1</b> BSD-2-Clause · Zig 0.17</span>
       <h1>Modern Tcl for the AI era. <em>Sandboxed, compiled, and built for agents.</em></h1>
-      <p class="sub">ztcl is an alternative implementation of Tcl in Zig, built to be the fastest and most complete one. It runs Tcl 9.1 scripts, and Tcl 8.6 scripts with <code>--tcl 8.6</code>, with a JIT compiler that is on by default. It is designed with AI in mind: each script gets an exact compute limit, a hard memory cap, and no host access until your program turns it on, and agent loops and microVMs are part of the language.</p>
+      <p class="sub">The fastest, most complete alternative Tcl, written in Zig. It runs Tcl 9.1 and 8.6 scripts with a JIT. Each script gets an exact compute limit, a memory cap, and no host access until you allow it.</p>
       <div class="actions">
         <a class="btn primary" href="playground/">Try it in your browser</a>
-        <a class="btn ghost" href="try/">Full-page shell</a>
         <a class="btn ghost" href="learn/01-read-a-command/">Start here: read Tcl in 15 minutes</a>
         <a class="btn ghost" href="quickstart/">Get started</a>
       </div>
@@ -70,12 +69,12 @@ Each command can use 10,000,000 compute units.
   <div class="wrap">
     <p class="eyebrow">Designed with AI in mind</p>
     <h2>Run code that you did not write.</h2>
-    <p class="lede">An agent writes a script, and your program runs it. ztcl stops that script at an exact count of work and a fixed amount of memory, gives it only the host access that you name, and can put it in its own microVM. The shell at the top of this page runs with these limits.</p>
+    <p class="lede">An agent writes a script, and your program runs it with an exact work limit, a memory cap, and only the host access that you name. The shell above runs this way.</p>
     <div class="grid g2">
-      <div class="card"><h3>Exact limits</h3><p class="muted">Each command and each loop pass uses compute units. At the compute limit, the script stops with an error that <code>catch</code> cannot catch, at the same point on each machine and in each JIT tier. The heap never goes above twice its memory limit. <a href="limits/">Limits</a>.</p></div>
-      <div class="card"><h3>Host access by capability</h3><p class="muted">A new interpreter has no file, socket, process, clock, or environment command. Your program turns on each one with its own policy, and a child never gets more than its parent. <code>exec</code> is not sandboxed. <a href="limits/">Capabilities</a>.</p></div>
-      <div class="card"><h3>Agents in the language</h3><p class="muted"><code>ztcl::agent</code> runs an LLM agent loop in an isolated thread, with tools that are Tcl commands and only the data that you give it. It works with a local model through the chat completions API. <a href="agents/">Sandboxed agents</a>.</p></div>
-      <div class="card"><h3>Tools for agents</h3><p class="muted"><code>ztcl debug</code> serves MCP tools, and the <a href="reference/">command reference</a>, <a href="reference/api.json">api.json</a>, and <a href="llms.txt">llms.txt</a> give an agent the synopsis, errors, and capability of each command. The <a href="learn/01-read-a-command/">Learn course</a> teaches people to review agent code.</p></div>
+      <div class="card"><h3>Exact limits</h3><p class="muted">A script stops at the same compute unit on each machine and JIT tier, with an error that <code>catch</code> cannot catch. <a href="limits/">Limits</a>.</p></div>
+      <div class="card"><h3>Host access by capability</h3><p class="muted">A new interpreter has no files, sockets, processes, clock, or environment. You allow each one with a policy. <a href="limits/">Capabilities</a>.</p></div>
+      <div class="card"><h3>Agents in the language</h3><p class="muted"><code>ztcl::agent</code> runs an LLM agent loop in an isolated thread, with Tcl commands as tools. <a href="agents/">Sandboxed agents</a>.</p></div>
+      <div class="card"><h3>Tools for agents</h3><p class="muted">MCP tools, the <a href="reference/">command reference</a>, <a href="reference/api.json">api.json</a>, and <a href="llms.txt">llms.txt</a>.</p></div>
     </div>
   </div>
 </section>
@@ -84,17 +83,17 @@ Each command can use 10,000,000 compute units.
   <div class="wrap">
     <p class="eyebrow">Speed</p>
     <h2>Measured on real tasks, against Tcl, Python, Go, and Zig.</h2>
-    <p class="lede">The same 14 tasks in each language, in the code that a fluent user writes with the standard library, with equal output. Each time is the wall clock of the whole process in milliseconds. <a href="https://github.com/beetlebugorg/ztcl/tree/main/bench/compare">bench/compare</a> runs them all with one command.</p>
+    <p class="lede">The same 14 tasks in each language, with standard libraries and equal output. Times are wall-clock milliseconds. <a href="https://github.com/beetlebugorg/ztcl/tree/main/bench/compare">bench/compare</a> runs them all.</p>
     <div class="split">
       <div>
         <ul class="checks">
-          <li><b>Against tclsh 8.6.16:</b> ztcl is faster on 8 of 9 real tasks, from 1.25 times (sorting strings) to 12.8 times (CSV, with the same Tcl script), and 1.8 times at the median. It is slower on base64 end to end, 255 ms against 205 ms, because of a slow binary file read (<a href="https://github.com/beetlebugorg/ztcl/issues/696">#696</a>). It starts in 2.5 ms, and tclsh in 3.6 ms.</li>
-          <li><b>Against Python 3.14:</b> ztcl is faster on 6 of 11: JSON (292 against 585 ms), string formatting, templates, both sorts (strings by 4 %, within the spread), and the HTTP server (42,501 against 11,342 requests/s). Python is faster on base64 (90 against 255 ms), CSV (1,545 against 1,891 ms), the web log regex (252 against 1,046 ms), and word frequency (782 against 1,182 ms). TLS is equal within the spread.</li>
-          <li><b>Against Go and Zig:</b> Go is faster on 7 of 11. ztcl is faster on JSON, string formatting, templates, and the HTTP server (Go with <code>GOMAXPROCS=1</code>: 28,580 requests/s). Zig is faster on all 11, from 1.3 times (HTTP) to 47 times (the web log, where Zig has a hand-written scan and no regex).</li>
-          <li><b>The JIT</b> changes the real tasks by less than their spread, because their time is in built-in commands such as <code>regexp</code> and <code>lsort</code>. It halves recursive fib (170 to 90 ms). The n-body float loop runs in 702 ms in ztcl, 341 ms in Python, and 6.6 ms in Go.</li>
-          <li><b>Micro benchmarks only:</b> recursive fib(30) is 6.6 times as fast as in tclsh. A 10-million-pass integer loop in a proc runs in 8.3 ms with the JIT and in 413 ms in tclsh 8.6.16 (a GitHub runner), about 50 times as fast. That case is narrow: one proc with integer variables and no strings or lists.</li>
+          <li><b>Against tclsh 8.6.16:</b> 1.8 times as fast at the median, up to 12.8 times (CSV). Slower on base64 end to end, because of a slow file read (<a href="https://github.com/beetlebugorg/ztcl/issues/696">#696</a>).</li>
+          <li><b>Against Python 3.14:</b> faster on 6 of 11, such as JSON (2 times) and the HTTP server (3.7 times). Slower on base64, CSV, regex, and word frequency.</li>
+          <li><b>Against Go and Zig:</b> Go is faster on 7 of 11, and ztcl on JSON, formatting, templates, and HTTP. Zig is faster on all 11.</li>
+          <li><b>The JIT</b> halves recursive fib. Real tasks spend their time in built-in commands, so the JIT changes them little.</li>
+          <li><b>Micro benchmark:</b> an integer loop in a proc is about 50 times as fast as in tclsh. That case is narrow.</li>
         </ul>
-        <p class="muted small" style="margin-top:20px">An Intel Core i7-6700K with Linux, 2026-11-27, 15 rounds. Other jobs shared the host (load average 4 to 7), so some values have a wide spread, and the charts mark them with pale bars. ztcl runs in its default mode, Tcl 9.1. A run on an Apple M1 comes next. <a href="performance/">Performance</a> has all results, JSON, threads, and how each was measured.</p>
+        <p class="muted small" style="margin-top:20px">Intel i7-6700K, Linux, 2026-11-27, 15 rounds, on a shared host: pale bars have a wide spread. <a href="performance/">Performance</a> has all results and the method.</p>
       </div>
       <div>
         <div class="benchtabs" role="tablist" aria-label="Task family" hidden>
@@ -120,7 +119,7 @@ Each command can use 10,000,000 compute units.
   <div class="wrap">
     <p class="eyebrow">Isolation and VMs</p>
     <h2>A thread, a process, or a microVM for each job.</h2>
-    <p class="lede">Real threads with the commands of the Tcl Thread package, each with its own interpreter, heap, and limits. <code>thread::create -isolation process</code> puts a thread in a child process in the sandbox of the OS. <code>-isolation vm</code> puts it in a Linux guest on KVM, Virtualization.framework, or the Windows Hypervisor Platform, with no QEMU. On KVM, a thread starts in its own guest in 9.6 ms, a snapshot restores in 0.42 ms, and <code>exec -vm</code> runs a program in a guest in 939 µs (2026-11-27). Guest network traffic goes through a user-mode NAT of ztcl with the policy of the sandbox. <a href="isolation/">Isolated threads</a> and <a href="vm/">Linux guests</a>.</p>
+    <p class="lede">Real threads, each with its own interpreter, heap, and limits. <code>-isolation process</code> puts a thread in an OS sandbox, and <code>-isolation vm</code> in a Linux microVM with no QEMU. On KVM, a guest thread starts in 9.6 ms, and a snapshot restores in 0.42 ms. <a href="isolation/">Isolated threads</a> and <a href="vm/">Linux guests</a>.</p>
   </div>
 </section>
 
@@ -143,7 +142,7 @@ Each command can use 10,000,000 compute units.
       <div>
         <p class="eyebrow">Web and WebAssembly</p>
         <h2>The same interpreter in the browser, and a wasm engine in ztcl.</h2>
-        <p class="lede" style="margin-bottom:16px"><code>npm install @beetlebug/ztcl</code> gives a 508 KB module (gzip) with the same limits. <code>dom</code> changes the page, and <code>web::</code> reaches the Web APIs, such as Web Serial. In the other direction, <code>ztcl::wasm</code> is a WebAssembly engine and a WASI host of our own: it passes all 27,412 commands of the core spec suite, and its JIT runs SQLite compiled to wasm 9 times as fast as its interpreter.</p>
+        <p class="lede" style="margin-bottom:16px"><code>npm install @beetlebug/ztcl</code>: a 508 KB module with the same limits, and <code>dom</code> and <code>web::</code> for the page. <code>ztcl::wasm</code> runs WebAssembly with its own JIT and passes the full core spec suite.</p>
         <div class="actions"><a class="btn primary" href="playground/">Try it in your browser</a><a class="btn ghost" href="webassembly/">WebAssembly</a></div>
       </div>
       <div class="codecard">
@@ -177,7 +176,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   <div class="wrap">
     <p class="eyebrow">Compatibility</p>
     <h2>Tcl 9.1 by default, Tcl 8.6 on request.</h2>
-    <p class="lede">The test suites of Tcl are the measure. 38,101 of the 47,133 tests of Tcl 8.6.16 pass with the JIT on, and 38,097 on the interpreter. 11,165 tests pass in the 37 core files of Tcl 9.1.0 (2026-11-27). ztcl is not yet a drop-in replacement. The JIT gives the same output, errors, and compute units as the interpreter. <code>ztcl --tcl 8.6</code> follows Tcl 8.6 for each interpreter on its own, and with libztcl, the unchanged <code>/usr/bin/tclsh8.6</code> runs on ztcl. <a href="tcl91/">Tcl 9.1 and Tcl 8.6</a>.</p>
+    <p class="lede">More than 38,100 Tcl 8.6.16 tests and 11,165 Tcl 9.1 core tests pass. The JIT gives the same output as the interpreter. With libztcl, the unchanged <code>tclsh8.6</code> runs on ztcl. <a href="tcl91/">Tcl 9.1 and Tcl 8.6</a>.</p>
   </div>
 </section>
 
