@@ -1,12 +1,1 @@
 # The command reference: lists. The format is in docs/reference/README.md.
-
-== lmap
-syn: lmap varList list ?varList list ...? command
-does: Runs the command for each element, as `foreach` does, and gives a list of the results. A `continue` leaves out that element.
-ex: lmap x {1 2 3} {expr {$x * $x}} => 1 4 9
-ex: lmap x {1 2 3 4} {if {$x % 2} continue; set x} => 2 4
-
-== foreach
-syn: foreach varList list ?varList list ...? command
-does: Runs the command for each element of the list. With a varList of more than one name, it gets that many elements each time. With more than one list, it goes through each list in step.
-ex: set out {}; foreach {k v} {a 1 b 2} {append out $k=$v,}; set out => a=1,b=2,
