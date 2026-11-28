@@ -1,1 +1,0 @@
-# The command reference: lists. The format is in docs/reference/README.md.
