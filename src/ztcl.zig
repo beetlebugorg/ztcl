@@ -20,6 +20,9 @@ pub const features = @import("features.zig");
 /// True in the app runtime of `zig build app-runtime`: the binary runs
 /// only the payload of `ztcl build`.
 pub const app_only = @hasDecl(@import("build_options"), "app_only") and @import("build_options").app_only;
+/// The version of ztcl (build.zig.zon), or "unknown" in a build with no
+/// such option, such as the WebAssembly and the enclave builds.
+pub const version: []const u8 = if (@hasDecl(@import("build_options"), "version")) @import("build_options").version else "unknown";
 pub const interp = @import("interp.zig");
 pub const expr = @import("expr.zig");
 pub const noise = @import("noise.zig");

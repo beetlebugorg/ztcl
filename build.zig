@@ -28,6 +28,9 @@ pub fn build(b: *std.Build) void {
     const gc_precise = b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false;
     gc_options.addOption(bool, "gc_precise", gc_precise);
     lib_options.addOption(bool, "gc_precise", gc_precise);
+    // The version of build.zig.zon, for `ztcl version` and `ztcl --version`.
+    gc_options.addOption([]const u8, "version", ztcl_version);
+    lib_options.addOption([]const u8, "version", ztcl_version);
     cext_on = b.option(bool, "cext-wasm", "Add the exports of C packages in WebAssembly to the wasm libraries") orelse false;
     // The runtime of `ztcl compile --wasm` is only a WebAssembly build.
     gc_options.addOption(bool, "aot", false);

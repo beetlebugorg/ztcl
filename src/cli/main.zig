@@ -536,6 +536,14 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     }
     // A binary of `ztcl build` runs its payload and reads no option.
     if (builtin.os.tag != .wasi and setup == null) if (tcl.buildnative.payloadRange()) |r| return runApp(init, args, r.off, r.len);
+    // `ztcl version` and `ztcl --version` give the version of build.zig.zon.
+    if (setup == null and args.len == 2 and (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1], "--version"))) {
+        var out_buf: [256]u8 = undefined;
+        var out_w: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
+        out_w.interface.print("ztcl {s}\n", .{tcl.version}) catch {};
+        out_w.interface.flush() catch {};
+        return;
+    }
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
         var out_buf: [4096]u8 = undefined;
         var out_w: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
