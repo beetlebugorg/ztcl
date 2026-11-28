@@ -296,7 +296,7 @@ fn popPath(it: *Interp, v: Value, path: []const Value) Error![2]Value {
 
 /// lpop listVar ?index ...?
 fn cmdLpop(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len < 2) return it.wrongArgs("lpop listVar ?index?");
+    if (argv.len < 2) return it.wrongArgs("lpop listvar ?index?");
     const name = try it.str(argv[1]);
     const cur = try it.getVar(name);
     var path: []const Value = argv[2..];

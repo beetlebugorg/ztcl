@@ -14,7 +14,6 @@ command lpop {
     }
     returns {The element that was taken out.}
     see {lindex lremove lset lappend}
-    difference {Tcl 9.0.4 names the variable `listvar` in its message of a wrong count of arguments ([issue 676](https://github.com/beetlebugorg/ztcl/issues/676)).}
     difference {A variable with no value has `-errorcode NONE`, where Tcl 9.0.4 gives `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     argument VAR {
         type {variable name}
@@ -55,4 +54,5 @@ command lpop {
         unset -nocomplain nv
         lpop nv
     } {can't read "nv": no such variable} NONE
+    error {lpop} {wrong # args: should be "lpop listvar ?index?"} {TCL WRONGARGS}
 }
