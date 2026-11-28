@@ -17,7 +17,6 @@ command chan {
     }
     returns {The result of the subcommand.}
     see {open close gets read puts fconfigure {file channels}}
-    difference {`chan` has no `push` or `pop`, so the message of an unknown subcommand does not list them ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
     release {In Tcl 9.1 the messages of a wrong count of arguments name the channel `channel`, and in Tcl 8.6 `channelId`.}
     example {
         set f [open a.txt w]; chan puts $f hello; chan close $f
@@ -27,9 +26,9 @@ command chan {
         set line
     } hello
     example {lsort [chan names std*]} {stderr stdin stdout}
-    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 8.6
-    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 9.1
-    error {chan p} {unknown or ambiguous subcommand "p": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND p} -tcl 8.6
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, pop, postevent, push, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 8.6
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, pop, postevent, push, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 9.1
+    error {chan p} {unknown or ambiguous subcommand "p": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, pop, postevent, push, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND p} -tcl 8.6
     error {chan blocked} {wrong # args: should be "chan blocked channelId"} {TCL WRONGARGS} -tcl 8.6
     error {chan blocked} {wrong # args: should be "chan blocked channel"} {TCL WRONGARGS} -tcl 9.1
     error {chan close nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
@@ -316,6 +315,98 @@ command chan {
         } {chan handler "d1 initialize" returned bad method "bogus": must be blocking, cget, cgetall, configure, finalize, initialize, read, seek, watch, or write} {TCL LOOKUP INDEX method bogus}
         error {chan create bogus x} {bad mode "bogus": must be read or write} {TCL LOOKUP INDEX mode bogus}
         error {chan create} {wrong # args: should be "chan create mode cmdprefix"} {TCL WRONGARGS}
+    }
+
+    subcommand push {
+        synopsis {chan push CHAN CMDPREFIX}
+        summary {Puts a transform on top of a channel.}
+        description {
+            Puts a transform with a handle `rtN` on top of CHAN and gives the name of CHAN. Each read and each write of the channel goes through the transform, and through the transforms below it. CMDPREFIX gets the name of a method, the handle, and the arguments of the method:
+
+            - `initialize HANDLE MODE` gives the list of the methods. `initialize` and `finalize` are required, and the transform needs `read` for a channel that reads or `write` for a channel that writes.
+            - `read HANDLE BYTES` gets the bytes from below and gives the bytes for the channel.
+            - `write HANDLE BYTES` gets the bytes of the channel and gives the bytes to write below.
+            - `drain HANDLE` gives the last bytes for the channel at the end of the data below.
+            - `flush HANDLE` gives the last bytes to write below, at the close and at `chan pop`.
+            - `clear HANDLE` runs at `seek`. The transform drops the bytes that it holds.
+            - `finalize HANDLE` runs at the close and at `chan pop`.
+
+            The output of the channel before `push` goes below the transform. A read waits for data also on a channel with `-blocking 0`. An error of `read` is an error of the read of the channel: tclsh 8.6.16 gives the end of the data. `limit?` is accepted and not called.
+        }
+        returns {The name of the channel.}
+        see {{chan pop} {chan create}}
+        argument CHAN {
+            type channel
+            summary {The channel.}
+        }
+        argument CMDPREFIX {
+            type {command prefix}
+            summary {The handler of the transform.}
+        }
+        example {
+            proc up {cmd h args} {
+                switch $cmd {
+                    initialize {return {initialize finalize read write}}
+                    read - write {return [string toupper [lindex $args 0]]}
+                }
+            }
+            set f [open a.txt w]
+            chan push $f up
+            chan puts -nonewline $f hello
+            chan close $f
+            set f [open a.txt]
+            set r [chan read $f]
+            chan close $f
+            set r
+        } HELLO
+        error {
+            proc b2 {cmd h args} {if {$cmd eq "initialize"} {return {initialize finalize}}}
+            set f [open a.txt w]
+            catch {chan push $f b2} m
+            chan close $f
+            error $m
+        } {chan handler "b2" makes the channel inaccessible} NONE
+        error {
+            proc b1 {cmd h args} {if {$cmd eq "initialize"} {return {initialize finalize watch}}}
+            set f [open a.txt w]
+            catch {chan push $f b1} m o
+            chan close $f
+            error $m {} [dict get $o -errorcode]
+        } {chan handler "b1 initialize" returned bad method "watch": must be clear, drain, finalize, flush, initialize, limit?, read, or write} {TCL LOOKUP INDEX method watch}
+        error {chan push nochan up} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
+        error {chan push} {wrong # args: should be "chan push channel cmdprefix"} {TCL WRONGARGS}
+    }
+
+    subcommand pop {
+        synopsis {chan pop CHAN}
+        summary {Takes the top transform off a channel.}
+        description {Writes the output of the channel through the top transform and calls its `flush` and `finalize`. The bytes that the transform holds, and the result of its `drain`, go to the read buffer of the channel. A channel with no transform stays as it is.}
+        returns {An empty string.}
+        see {{chan push}}
+        argument CHAN {
+            type channel
+            summary {The channel.}
+        }
+        example {
+            proc up {cmd h args} {
+                switch $cmd {
+                    initialize {return {initialize finalize write}}
+                    write {return [string toupper [lindex $args 0]]}
+                }
+            }
+            set f [open a.txt w]
+            chan push $f up
+            chan puts -nonewline $f ab
+            chan pop $f
+            chan puts -nonewline $f cd
+            chan close $f
+            set f [open a.txt]
+            set r [chan read $f]
+            chan close $f
+            set r
+        } ABcd
+        example {chan pop stdin} {}
+        error {chan pop} {wrong # args: should be "chan pop channel"} {TCL WRONGARGS}
     }
 
     subcommand postevent {

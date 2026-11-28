@@ -29,6 +29,7 @@ const ProcTree = if (proc_ok) proc_mod.Tree else struct {};
 const ProcJob = if (proc_ok and @hasDecl(proc_mod, "Job")) proc_mod.Job else void;
 const event = @import("event.zig");
 const refl_mod = @import("chanrefl.zig");
+const xform_mod = @import("chanxform.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
 /// The line end of the output of a file of the platform, as in Tcl:
@@ -135,6 +136,9 @@ pub const Channel = struct {
     /// The handler of a reflected channel of `chan create`
     /// (`chanrefl.zig`), or null.
     refl: ?*refl_mod.Refl = null,
+    /// The top transform of `chan push` (`chanxform.zig`), or null.
+    /// The top transform is also `filter`.
+    xform: ?*xform_mod.Xform = null,
 };
 
 /// Runs the command `op` of a script on a channel of a C package, with
@@ -178,6 +182,8 @@ pub const State = struct {
     next_sock: u32 = 0,
     /// The number of the next name `rcN` of `chan create`.
     next_rc: u32 = 0,
+    /// The number of the next handle `rtN` of `chan push`.
+    next_rt: u32 = 0,
     /// The counters of the names of a thread group. With them, each
     /// channel of the group has its own name, so a channel can move to
     /// another thread (`tchan.zig`).
@@ -200,6 +206,65 @@ pub const Counters = struct {
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
+}
+
+pub fn findChannel(it: *Interp, v: Value) Error!*Channel {
+    return find(it, v);
+}
+
+/// The descriptor of the output of `c`, for the filters.
+pub fn writeFd(c: *const Channel) i32 {
+    return outFd(c);
+}
+
+/// Reads the descriptor of `c` with no filter, for a transform. A
+/// channel that does not block waits here for data.
+pub fn rawRead(it: *Interp, c: *Channel, buf: []u8) Error!usize {
+    while (true) {
+        switch (try @import("tape.zig").read(it, c.fd, buf)) {
+            .n => |n| {
+                meterIo(it, c, true, n);
+                return n;
+            },
+            .again => {
+                var w = [_]sys.Want{.{ .fd = c.fd, .read = true }};
+                sys.poll(it.alloc(), &w, -1);
+            },
+            .err => |f| {
+                if ((c.kind != .file and eql(f.name, "ECONNRESET")) or (c.pty and eql(f.name, "EIO"))) return 0;
+                return sysError(it, f, try std.fmt.allocPrint(it.alloc(), "error reading \"{s}\": ", .{c.name}));
+            },
+        }
+    }
+}
+
+/// Writes all of `data` to the descriptor of `c` with no filter, for
+/// a transform.
+pub fn rawWrite(it: *Interp, c: *Channel, data: []const u8) Error!void {
+    var at: usize = 0;
+    while (at < data.len) {
+        switch (sys.write(outFd(c), data[at..])) {
+            .n => |n| {
+                at += n;
+                meterIo(it, c, false, n);
+            },
+            .again => {
+                var w = [_]sys.Want{.{ .fd = outFd(c), .write = true }};
+                sys.poll(it.alloc(), &w, -1);
+            },
+            .err => |f| return sysError(it, f, try std.fmt.allocPrint(it.alloc(), "error writing \"{s}\": ", .{c.name})),
+        }
+    }
+}
+
+/// True for a TLS channel: a filter under the transforms that is not
+/// a reflected channel.
+fn isTls(c: *const Channel) bool {
+    if (c.refl != null) return false;
+    var f = c.filter;
+    var x = c.xform;
+    while (x) |t| : (x = t.under) f = t.below;
+    return f != null;
 }
 
 fn find(it: *Interp, v: Value) Error!*Channel {
@@ -1204,6 +1269,7 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (c.refl) |r| {
         try flushOut(it, c);
+        try xform_mod.clearAll(c);
         _ = try refl_mod.seek(it, r, off + adjust, whence) orelse
             return it.failCode("POSIX EINVAL {invalid argument}", "error during seek on \"{s}\": invalid argument", .{c.name});
         c.rbuf.clearRetainingCapacity();
@@ -1215,6 +1281,7 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (c.mem) return memSeek(it, c, off, whence);
     try flushOut(it, c);
+    try xform_mod.clearAll(c);
     switch (sys.seek(c.fd, off + adjust, @intCast(whence))) {
         .at => {},
         .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error during seek on \"{s}\": ", .{c.name})),
@@ -1361,7 +1428,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 c.blocking = b;
                 continue;
             }
-            if (!b and c.filter != null) return it.fail("-blocking 0 is not supported on a TLS channel", .{});
+            if (!b and isTls(c)) return it.fail("-blocking 0 is not supported on a TLS channel", .{});
             c.blocking = b;
             if (!c.connecting) {
                 sys.setBlocking(c.fd, c.blocking);
@@ -1635,10 +1702,9 @@ fn usageOfChan(it: *Interp, sub: []const u8) Error!void {
 
 /// The subcommands of `chan`. `isbinary` is in Tcl 9.1 only. A unique
 /// prefix names a subcommand, as in an ensemble of Tcl.
-/// `create` and `postevent` are in `chanrefl.zig`. `push` and `pop`
-/// (transforms, issue 690) are not here yet: they need a stack of
-/// transforms on a channel that each read and write go through.
-const ChanSub = enum { blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, postevent, puts, read, seek, tell, truncate };
+/// `create` and `postevent` are in `chanrefl.zig`, and `push` and
+/// `pop` in `chanxform.zig`.
+const ChanSub = enum { blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, pop, postevent, push, puts, read, seek, tell, truncate };
 
 fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     return chanSub(it, argv, cmd) catch |e| {
@@ -1672,6 +1738,8 @@ fn chanSub(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (eql(sub, "truncate")) return chanTruncate(it, argv);
     if (eql(sub, "create")) return refl_mod.create(it, argv);
     if (eql(sub, "postevent")) return refl_mod.postevent(it, argv);
+    if (eql(sub, "push")) return xform_mod.push(it, argv);
+    if (eql(sub, "pop")) return xform_mod.pop(it, argv);
     if (eql(sub, "isbinary")) {
         if (argv.len != 3) return it.wrongArgs("chan isbinary channelId");
         const c = try find(it, argv[2]);
