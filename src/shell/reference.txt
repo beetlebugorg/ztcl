@@ -630,7 +630,22 @@ syn: pid ?fileId?
 == exit
 syn: exit ?returnCode?
 == ztcl::json ztcl::json::parse ztcl::json::valid ztcl::json::get ztcl::json::exists ztcl::json::encode ztcl::json::object ztcl::json::array ztcl::json::string ztcl::json::number ztcl::json::bool ztcl::json::null ztcl::json::raw ztcl::json::pretty
-syn: ztcl::json subcommand ?arg ...?
+syn: ztcl::json SUBCOMMAND ?ARG ...?
+sub: ztcl::json parse ?-null VALUE? ?-typed? ?--? TEXT | Gives the Tcl value of a JSON text.
+sub: ztcl::json valid TEXT | Tests whether a text is valid JSON.
+sub: ztcl::json get ?-null VALUE? ?--? TEXT ?STEP ...? | Gives the value at a path of a JSON text, with no full parse.
+sub: ztcl::json exists TEXT ?STEP ...? | Tests whether a path of a JSON text has a value.
+sub: ztcl::json encode -schema SCHEMA VALUE | Writes a Tcl value as JSON text, with a schema or a typed tree.
+sub: ztcl::json encode -typed TREE | Writes a typed tree of parse -typed.
+sub: ztcl::json encode -auto VALUE | Writes a dict with a guess for each value; the same as -schema object.
+sub: ztcl::json object ?KEY JSON ...? | Writes a JSON object from keys and JSON values.
+sub: ztcl::json array ?JSON ...? | Writes a JSON array from JSON values.
+sub: ztcl::json string S | Writes a JSON string.
+sub: ztcl::json number N | Writes a JSON number.
+sub: ztcl::json bool B | Writes a JSON true or false.
+sub: ztcl::json null | Writes a JSON null.
+sub: ztcl::json raw JSON | Checks a JSON text and gives it as it is.
+sub: ztcl::json pretty ?-indent N? TEXT | Lays out a JSON text with one member on each line.
 == ztcl::vt
 syn: ztcl::vt subcommand ?arg ...?
 == ztcl::wasm
