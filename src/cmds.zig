@@ -390,7 +390,7 @@ fn cmdWhile(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const body = try it.scriptOf(argv, 2, cmd);
     while (try expr.truthy(it, try expr.eval(it, cond))) {
         try step(it);
-        _ = it.evalScript(body) catch |e| switch (e) {
+        it.evalDropped(body) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => continue,
             else => return bodyContext(it, e, cmd, 2, false, "(\"while\" body line {d})"),
@@ -407,12 +407,12 @@ fn cmdFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const body = try it.scriptOf(argv, 4, cmd);
     while (try expr.truthy(it, try expr.eval(it, cond))) {
         try step(it);
-        _ = it.evalScript(body) catch |e| switch (e) {
+        it.evalDropped(body) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => {},
             else => return bodyContext(it, e, cmd, 4, false, "(\"for\" body line {d})"),
         };
-        _ = it.evalScript(next) catch |e| switch (e) {
+        it.evalDropped(next) catch |e| switch (e) {
             error.TclBreak => break,
             else => return bodyContext(it, e, cmd, 3, false, "(\"for\" loop-end command)"),
         };
@@ -470,7 +470,9 @@ fn loop(it: *Interp, argv: []const Value, cmd: ?*Cmd, mode: enum { each, map, fi
                 };
             }
         }
-        const v = it.evalScript(body) catch |e| switch (e) {
+        // `foreach` drops the result of its body.
+        const got: Error!Value = if (mode == .each) (if (it.evalDropped(body)) |_| Value.empty else |e| e) else it.evalScript(body);
+        const v = got catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => continue,
             else => return switch (mode) {

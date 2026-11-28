@@ -3862,3 +3862,16 @@ test "a file writes the line end of the platform, and binary reads back as lf" {
     try std.testing.expectEqualStrings(want, r);
     _ = try it.eval("file delete -force .zig-cache/ztcl-crlf-test");
 }
+
+test "dict incr in a loop body at the top level writes the dict in place (#622)" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    _ = try it.eval("set words {}; for {set i 0} {$i < 4000} {incr i} { lappend words w[expr {$i % 2000}] }");
+    const before = it.heap.allocatedBytes();
+    // A copy of the dict at each call allocates about 2,000 pairs
+    // each time: more than 200 MB for the loops.
+    _ = try it.eval("set c {}; foreach w $words { dict incr c $w }; set i 0; while {$i < 4000} { dict set c [lindex $words $i] x; incr i }");
+    try std.testing.expect(it.heap.allocatedBytes() - before < 20 << 20);
+    try std.testing.expectEqualStrings("2000 x 2", try it.str(try it.eval("list [dict size $c] [dict get $c w5] [set r [foreach w {a a} { dict incr c $w }]; dict get $c a]")));
+}

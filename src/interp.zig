@@ -2586,6 +2586,18 @@ pub const Interp = struct {
     }
 
     pub fn evalScript(it: *Interp, s: *Script) Error!Value {
+        return it.evalScriptAs(s, false);
+    }
+
+    /// `evalScript` for a caller that drops the result, such as the body
+    /// of a loop. The bytecode of the script then drops the result of its
+    /// last command too (`vm.compileDropped`). The result is not the
+    /// result of the script.
+    pub fn evalDropped(it: *Interp, s: *Script) Error!void {
+        _ = try it.evalScriptAs(s, true);
+    }
+
+    fn evalScriptAs(it: *Interp, s: *Script, drop: bool) Error!Value {
         const host = it.nest == 0 and it.heap.scopes == 0;
         if (host) it.heap.scopes = 1;
         defer if (host) {
@@ -2593,13 +2605,23 @@ pub const Interp = struct {
             it.cancel_unwinding = false;
         };
         try it.checkNative();
-        if (s.code) |bc| return vm.run(it, bc);
+        if (s.code) |bc| {
+            if (!drop) return vm.run(it, bc);
+            // The dropped code goes with `s.code`, so a change that
+            // compiles the script again also compiles it again.
+            if (bc.dropped == null) bc.dropped = try vm.compileDropped(it, s);
+            return vm.run(it, bc.dropped.?);
+        }
         // A body of the top level of the program of the debugger compiles
         // at its first run, so its lines get `probe` instructions.
         if (@import("probe.zig").enabled and s.runs == 0 and it.probes != null and @import("probe.zig").topBase(it, s) != null) s.runs = 1;
         // A script that runs one time stays on the general path.
         if (s.runs > 0) {
             s.code = try vm.compileNamed(it, s);
+            if (drop) {
+                s.code.?.dropped = try vm.compileDropped(it, s);
+                return vm.run(it, s.code.?.dropped.?);
+            }
             return vm.run(it, s.code.?);
         }
         s.runs = 1;
