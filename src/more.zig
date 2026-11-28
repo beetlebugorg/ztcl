@@ -696,10 +696,11 @@ fn uuCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
             return it.fail("bad option \"{s}\": must be -maxlen or -wrapchar", .{o});
         } else return it.fail("bad option \"{s}\": must be -strict", .{o});
     }
-    const data = try it.str(argv[argv.len - 1]);
+    // The data is a string of bytes for the two directions, as in Tcl.
+    const data = try toBytes(it, try it.str(argv[argv.len - 1]));
     var out: std.ArrayList(u8) = .empty;
     if (encode) {
-        const bytes = try toBytes(it, data);
+        const bytes = data;
         const per_line: usize = @intCast(@divFloor(maxlen - 1, 4) * 3);
         var k: usize = 0;
         while (k < bytes.len) {
@@ -818,10 +819,11 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
             return it.fail("bad option \"{s}\": must be -maxlen or -wrapchar", .{o});
         } else return it.fail("bad option \"{s}\": must be -strict", .{o});
     }
-    const data = try it.str(argv[argv.len - 1]);
+    // The data is a string of bytes for the two directions, as in Tcl.
+    const data = try toBytes(it, try it.str(argv[argv.len - 1]));
     var out: std.ArrayList(u8) = .empty;
     if (encode) {
-        const bytes = try toBytes(it, data);
+        const bytes = data;
         if (is_hex) {
             const hex = try a.alloc(u8, bytes.len * 2);
             const did = if (simd64()) b64_simd.hexEncode(hex, bytes) else 0;
@@ -856,7 +858,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
         for (data[did..], did..) |ch, pos| {
             const d = std.fmt.charToDigit(ch, 16) catch {
                 if (!strict and std.ascii.isWhitespace(ch)) continue;
-                return it.fail("invalid hexadecimal digit \"{c}\" at position {d}", .{ ch, pos });
+                return it.fail("invalid hexadecimal digit \"{s}\" at position {d}", .{ try fromBytes(it, data[pos..][0..1]), pos });
             };
             if (half) |h| {
                 hbuf[made] = h << 4 | d;
@@ -864,13 +866,10 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
                 half = null;
             } else half = d;
         }
+        // Tcl drops a last digit that has no pair, also with -strict.
         out.items = hbuf[0..made];
-        if (half != null and strict) return it.fail("invalid hexadecimal digit \"\" at position {d}", .{data.len});
         return .{ .str = try fromBytesKept(it, out.items) };
     }
-    var acc: u32 = 0;
-    var have: u32 = 0;
-    var pad: usize = 0;
     // Each four characters give three bytes at most.
     const buf = try a.alloc(u8, data.len / 4 * 3 + 3);
     var made: usize = 0;
@@ -893,27 +892,61 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
         buf[made + 2] = @truncate(v);
         made += 3;
     }
-    for (data[start..], start..) |ch, pos| {
-        const d = b64_value[ch];
-        if (d < 64 and pad == 0) {
-            acc = acc << 6 | d;
-            have += 6;
-            if (have >= 8) {
-                have -= 8;
-                buf[made] = @truncate(acc >> @intCast(have));
-                made += 1;
+    // The rest goes in groups of four places, as in Tcl. With no
+    // -strict, a character outside the alphabet has no place. A "=" in
+    // place 2 or 3 is padding: the group is the last one, and only a "="
+    // can fill its other places. With no -strict, a "=" in place 0 or 1
+    // has the value 0, and in place 1 it is padding also. The end of the
+    // text fills places 2 and 3 with padding.
+    var pos = start;
+    while (pos < data.len) {
+        var v: u32 = 0;
+        var cut: usize = 0;
+        var slot: usize = 0;
+        while (slot < 4) {
+            var ch: u8 = '=';
+            if (pos < data.len) {
+                ch = data[pos];
+                pos += 1;
+            } else if (slot <= 1) {
+                if (strict and slot == 1) return badBase64(it, data, pos - 1);
+                cut = 3;
+                break;
             }
-            continue;
+            const d = b64_value[ch];
+            if (cut > 0) {
+                if (ch == '=' and slot > 1) {
+                    v <<= 6;
+                    cut += 1;
+                } else if (strict) {
+                    return badBase64(it, data, pos - 1);
+                } else continue;
+            } else if (d < 64) {
+                v = v << 6 | d;
+            } else if (ch == '=' and (slot > 1 or !strict)) {
+                v <<= 6;
+                if (slot > 0) cut += 1;
+            } else if (strict) {
+                return badBase64(it, data, pos - 1);
+            } else continue;
+            slot += 1;
         }
-        if (ch == '=') {
-            pad += 1;
-            if (pad > 2) return it.fail("invalid base64 character \"=\" at position {d}", .{pos});
-            continue;
+        const three = [3]u8{ @truncate(v >> 16), @truncate(v >> 8), @truncate(v) };
+        const keep = 3 - @min(cut, 3);
+        @memcpy(buf[made..][0..keep], three[0..keep]);
+        made += keep;
+        if (cut > 0) {
+            // The text ends at the padding. -strict permits no more text.
+            if (strict and pos < data.len) return badBase64(it, data, pos - 1);
+            break;
         }
-        if (d >= 64 and !strict and std.ascii.isWhitespace(ch)) continue;
-        return it.fail("invalid base64 character \"{c}\" at position {d}", .{ ch, pos });
     }
     return .{ .str = try fromBytesKept(it, buf[0..made]) };
+}
+
+fn badBase64(it: *Interp, data: []const u8, pos: usize) Error {
+    // A byte above 127 shows as the character with that number.
+    return it.fail("invalid base64 character \"{s}\" at position {d}", .{ try fromBytes(it, data[pos..][0..1]), pos });
 }
 
 /// The value of each base64 character, and 255 for any other byte.
