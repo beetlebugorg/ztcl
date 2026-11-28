@@ -183,7 +183,7 @@ command ztcl::wasm {
     subcommand call {
         synopsis {ztcl::wasm call INSTANCE FUNCTION ?-limit UNITS? ?-raw? ?--? ?ARG ...?}
         summary {Calls an exported function and gives its result.}
-        description {Calls the export FUNCTION of INSTANCE with the ARG values, one for each parameter. It gives the result, a list for more than one result, or an empty string for none. The options come after FUNCTION, and the first word that is not an option is the first ARG.}
+        description {Calls the export FUNCTION of INSTANCE with the ARG values, one for each parameter. It gives the result, a list for more than one result, or an empty string for none. The options come after FUNCTION, and the first word that is not an option is the first ARG, also an unknown word such as `-bogus` ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).}
         returns {The result, a list of the results, or an empty string.}
         see {{ztcl::wasm exports} {ztcl::wasm instantiate}}
         argument INSTANCE {
@@ -291,7 +291,7 @@ command ztcl::wasm {
             value DICT
             type dict
             summary {Gives the package the folders and the other values of WASI.}
-            description {The keys of the `-wasi` option of `instantiate`. With no `-wasi`, the package gets the imports of WASI with no folder. The options are checked before the file is read.}
+            description {The keys of the `-wasi` option of `instantiate`. With no `-wasi`, the package gets the imports of WASI with no folder. The options are checked before the file is read. A `-wasi` with no value gives a wrong message ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).}
             example {
                 set f [open add.wasm wb]
                 puts -nonewline $f [binary decode hex 0061736d0100000001070160027f7f017f030201000707010361646400000a09010700200020016a0b]
@@ -427,7 +427,7 @@ command ztcl::wasm {
         synopsis {ztcl::wasm memory INSTANCE string ADDRESS ?LENGTH?}
         summary {Reads, writes, and grows the linear memory of an instance.}
         description {
-            Works on the memory that INSTANCE exports as `memory`, or on its first memory. A page is 65,536 bytes, and a range outside the memory is an error with the code `ZTCL WASM MEMORY`. The memory is looked up before the name of the subcommand, so an instance with no memory gives `the instance has no memory` for each word.
+            Works on the memory that INSTANCE exports as `memory`, or on its first memory. A page is 65,536 bytes, and a range outside the memory is an error with the code `ZTCL WASM MEMORY`. The memory is looked up before the name of the subcommand, so an instance with no memory gives `the instance has no memory` for each word ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).
 
             - `size` gives the size in pages.
             - `grow` grows the memory by PAGES pages and gives the old size, or -1 past the maximum of the memory or at the memory limit.
