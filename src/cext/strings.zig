@@ -304,6 +304,9 @@ fn upper(c: u21) u21 {
 fn title(c: u21) u21 {
     return ucd.toTitle(c);
 }
+fn lowerAfterTitle(c: u21) u21 {
+    return ucd.toLowerAfterTitle(c);
+}
 
 pub fn Tcl_UtfToLower(src: [*]u8) callconv(.c) c_int {
     return mapCase(src, lower, null);
@@ -314,7 +317,7 @@ pub fn Tcl_UtfToUpper(src: [*]u8) callconv(.c) c_int {
 }
 
 pub fn Tcl_UtfToTitle(src: [*]u8) callconv(.c) c_int {
-    return mapCase(src, lower, title);
+    return mapCase(src, lowerAfterTitle, title);
 }
 
 /// The order of the first `n` characters of `a` and `b`, by code point.
