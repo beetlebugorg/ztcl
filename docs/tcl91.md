@@ -35,6 +35,7 @@ Each part below is a difference that can break a script of 8.6. The fix is a cha
 These commands and subcommands exist only in Tcl 9.1. In 8.6 they are absent, as in tclsh 8.6. A script of 8.6 that defines a proc of the same name, such as `lpop`, replaces the command.
 
 - `lseq`, `lpop`, `lremove`, `ledit`, and `lfilter`.
+- `coroinject` and `coroprobe`, which put a command in a suspended coroutine or run one in it now.
 - The option `-integer` of `switch`.
 - The math functions of TIP 521 and TIP 745, such as `trunc()`, `log2()`, `isnan()`, and `signbit()`, and the commands `divmod`, `fpclassify`, `frexp`, `modf`, and `remquo`. The last digit of a function result can differ from tclsh 9.1.0, and the [reference](reference/README.md) lists the other differences.
 - The option `-stride` of `lsearch`.
@@ -117,7 +118,7 @@ A name with a namespace, such as `a::v`, also resolves only from the current nam
 
 These parts of Tcl 9.1 are not in ztcl yet. A script that uses them gets an error, or the behavior of 8.6, in both releases. [The TIP survey](dev/tips.md) lists each TIP and its issue.
 
-- The commands `const`, `timer`, `unicode`, `tcl::process`, `coroinject`, and `coroprobe`.
+- The commands `const`, `timer`, `unicode`, and `tcl::process`.
 - `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
 - The options `-backslashes`, `-commands`, and `-variables` of `subst`.
 - The removal of the old forms of `trace` (`variable`, `vdelete`, `vinfo`).
