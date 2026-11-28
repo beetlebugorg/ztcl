@@ -11,14 +11,13 @@ command chan {
     description {
         The channel commands as one ensemble. A channel is a stream of bytes with a name, such as `stdout` or the result of `open`. Most subcommands work as the command of the same name: `chan gets` is `gets`, `chan configure` is `fconfigure`, and `chan copy` is `fcopy`.
 
-        A new interpreter has no channels: the host turns on the capability `channels`, and `open` of a file also needs `file`. Each line of text goes out with `\n` on each platform, and the default encoding of a file is UTF-8.
+        A new interpreter has no channels: the host turns on the capability `channels`, and `open` of a file also needs `file`. A file writes the line end of its platform by default, `\r\n` on Windows and `\n` elsewhere, as tclsh does, and its default encoding is UTF-8 on each platform. The examples of this page set `-translation lf` where a count of bytes depends on the line end.
 
         A unique prefix of a subcommand is the subcommand. The examples of this page run in an empty root folder, and most of them read the file `a.txt` with the one line `hello`.
     }
     returns {The result of the subcommand.}
     see {open close gets read puts fconfigure {file channels}}
     difference {`chan` has no `create`, `push`, `pop`, `postevent`, or `truncate`, and in Tcl 9.1 no `isbinary`. The message of an unknown subcommand does not list `blocked`, `event`, and `pending` ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
-    difference {On Windows a file of tclsh writes `\r\n` by default, and ztcl writes `\n` ([issue 691](https://github.com/beetlebugorg/ztcl/issues/691)).}
     difference {In Tcl 9.0.4 the messages of a wrong count of arguments name the channel `channel` ([issue 692](https://github.com/beetlebugorg/ztcl/issues/692)).}
     example {
         set f [open a.txt w]; chan puts $f hello; chan close $f
@@ -48,7 +47,7 @@ command chan {
             summary {The text to write.}
         }
         example {
-            set f [open a.txt w]; chan puts $f hello; chan close $f
+            set f [open a.txt w]; chan configure $f -translation lf; chan puts $f hello; chan close $f
             file size a.txt
         } 6
         example {chan puts stdout hi} {} -output "hi\n"
@@ -196,7 +195,7 @@ command chan {
             summary {The place that OFFSET counts from.}
         }
         example {
-            set f [open a.txt w]; chan puts $f hello; chan close $f
+            set f [open a.txt w]; chan configure $f -translation lf; chan puts $f hello; chan close $f
             set f [open a.txt]
             chan seek $f 2
             set d [chan read $f]
@@ -423,10 +422,10 @@ command chan {
         option -translation {
             value MODE
             type {auto, binary, cr, crlf, or lf}
-            default {auto for input, lf for output}
+            default {auto for input; for output, crlf on Windows and lf elsewhere}
             values {auto binary cr crlf lf}
             summary {How the ends of lines change between the channel and the script.}
-            description {On input, `auto` reads `\n`, `\r\n`, and `\r` as a newline. On output, `lf` writes `\n`, `crlf` writes `\r\n`, and `cr` writes `\r`. `binary` changes no byte and sets the encoding to `binary`.}
+            description {On input, `auto` reads `\n`, `\r\n`, and `\r` as a newline. On output, `lf` writes `\n`, `crlf` writes `\r\n`, and `cr` writes `\r`, and a file writes the line end of its platform by default. `binary` changes no byte and sets the encoding to `binary`.}
             example {
                 set f [open a.txt w]
                 chan configure $f -translation crlf
@@ -435,12 +434,12 @@ command chan {
                 file size a.txt
             } 3
             example {
-                set f [open a.txt]
+                set f [open b.bin w]
                 chan configure $f -translation binary
-                set c [chan configure $f -translation]
+                chan puts $f a
                 chan close $f
-                set c
-            } binary
+                file size b.bin
+            } 2
             error {
                 set f [open a.txt]
                 catch {chan configure $f -bogus 1} m
@@ -485,8 +484,8 @@ command chan {
             summary {The channel to write.}
         }
         example {
-            set f [open a.txt w]; chan puts $f hello; chan close $f
-            set in [open a.txt]; set out [open c.txt w]
+            set f [open a.txt w]; chan configure $f -translation lf; chan puts $f hello; chan close $f
+            set in [open a.txt]; set out [open c.txt w]; chan configure $out -translation lf
             set n [chan copy $in $out]
             chan close $in; chan close $out
             list $n [file size c.txt]
@@ -523,7 +522,7 @@ command chan {
             summary {Copies in the background and calls a script at the end.}
             description {The copy runs in the event loop, and at its end the event loop calls SCRIPT with the count of bytes, and an error message as a second argument when the copy failed.}
             example {
-                set in [open a.txt]; set out [open d.txt w]
+                set in [open a.txt]; set out [open d.txt w]; chan configure $out -translation lf
                 chan copy $in $out -command {set ::done}
                 vwait ::done
                 chan close $in; chan close $out
