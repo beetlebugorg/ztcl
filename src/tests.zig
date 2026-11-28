@@ -3818,3 +3818,24 @@ test "exec -vm needs the vm capability, and open |-vm too" {
     try std.testing.expectError(error.TclError, it.eval("exec -bogus true"));
     try std.testing.expectEqualStrings("bad option \"-bogus\": must be -ignorestderr, -isolation, -keepnewline, -vm, or --", try it.str(it.result));
 }
+
+test "file in host mode on Windows: the separator, the native names, the drives, and the file system of the host" {
+    if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    try std.testing.expectEqualStrings("absolute volumerelative", try it.str(try it.eval("list [file pathtype C:/a] [file pathtype /a]")));
+    try std.testing.expectEqualStrings("1 1", try it.str(try it.eval("list [expr {[file separator] eq \"\\\\\"}] [expr {[file nativename C:/a/b] eq \"C:\\\\a\\\\b\"}]")));
+    // The drive of the current folder is one of the drives, and it has a
+    // file system with a name.
+    const drive = try it.str(try it.eval("string range [pwd] 0 2"));
+    const vols = try it.str(try it.eval("file volumes"));
+    try std.testing.expect(std.mem.indexOf(u8, vols, drive) != null);
+    const sys = try it.str(try it.eval("file system [pwd]"));
+    try std.testing.expect(std.mem.startsWith(u8, sys, "native ") and !std.mem.eql(u8, sys, "native root"));
+    // In the root folder the answers stay the ones of the root.
+    try tcl.fsroot.setRoot(&it, ".");
+    try std.testing.expectEqualStrings("/ / a/b {native root}", try it.str(try it.eval("list [file separator] [file volumes] [file nativename a/b] [file system a]")));
+}

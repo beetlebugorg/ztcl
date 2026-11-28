@@ -770,3 +770,40 @@ pub fn hostStat(it: *Interp, path: []const u8) Error!fsroot.StatResult {
     defer _ = CloseHandle(h);
     return statHandle(h);
 }
+
+extern "kernel32" fn GetLogicalDrives() callconv(.winapi) DWORD;
+extern "kernel32" fn GetVolumeInformationW(root: [*:0]const u16, name: ?[*]u16, name_len: DWORD, serial: ?*DWORD, max_component: ?*DWORD, flags: ?*DWORD, fs_name: ?[*]u16, fs_name_len: DWORD) callconv(.winapi) BOOL;
+
+/// The drives of the system as a list for `file volumes` in host mode:
+/// `C:/ D:/`, in the order of their letters.
+pub fn volumes(a: std.mem.Allocator) std.mem.Allocator.Error![]const u8 {
+    const mask = GetLogicalDrives();
+    var out: std.ArrayList(u8) = .empty;
+    for (0..26) |i| {
+        if (mask >> @intCast(i) & 1 == 0) continue;
+        if (out.items.len > 0) try out.append(a, ' ');
+        try out.appendSlice(a, &.{ @as(u8, 'A') + @as(u8, @intCast(i)), ':', '/' });
+    }
+    return out.items;
+}
+
+/// The name of the file system of the volume `prefix` (`C:` or
+/// `//server/share`), such as NTFS, or null when the system gives none.
+pub fn fsName(a: std.mem.Allocator, prefix: []const u8) std.mem.Allocator.Error!?[]const u8 {
+    var root: [600]u16 = undefined;
+    var n: usize = 0;
+    for (prefix) |c| {
+        if (n + 2 >= root.len) return null;
+        root[n] = if (c == '/') '\\' else c;
+        n += 1;
+    }
+    root[n] = '\\';
+    root[n + 1] = 0;
+    var name: [64]u16 = undefined;
+    if (GetVolumeInformationW(@ptrCast(&root), null, 0, null, null, null, &name, name.len) == 0) return null;
+    const len = std.mem.indexOfScalar(u16, &name, 0) orelse name.len;
+    return std.unicode.utf16LeToUtf8Alloc(a, name[0..len]) catch |e| switch (e) {
+        error.OutOfMemory => error.OutOfMemory,
+        else => null,
+    };
+}
