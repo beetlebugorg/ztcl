@@ -1,5 +1,58 @@
 # Performance
 
+## Against Tcl, Python, Go, and Zig
+
+[bench/compare](../bench/compare/README.md) runs the same 14 tasks in ztcl, tclsh 8.6.16, Python 3.14, Go 1.26, and Zig 0.17.0. Each program is the code that a fluent user of the language writes with the standard library, and the outputs are equal byte for byte. Each time is the wall clock of the whole process in milliseconds, the median of 15 runs, so it includes the start of the runtime. The HTTP task gives requests for each second on one thread and one keep-alive connection. ztcl runs in its default mode, Tcl 9.1.
+
+The host: an Intel Core i7-6700K (4 cores, 8 threads) with Linux 7.2, on 2026-11-27. Other jobs shared the host, with a load average of 4 to 7, so some values have a wide spread. The charts (`docs/site/bench/`, light and dark) show the interquartile range and mark each value with a spread over 10 % of its median. `results.tsv` has the quartiles and the extremes. A run on an Apple M1 comes next, as a second data set.
+
+```sh
+zig build -Doptimize=ReleaseFast
+python3 -I bench/compare/run.py
+python3 -I bench/compare/chart.py
+```
+
+| Task | ztcl | ztcl `--no-jit` | tclsh 8.6.16 | Python 3.14 | Go 1.26 | Zig 0.17 |
+|---|---:|---:|---:|---:|---:|---:|
+| base64, 16 MiB | 255 | 235 | 205 | 90.1 | 53.1 | 32.3 |
+| JSON, 25 MB | 292 | 318 | n/a | 585 | 432 | 203 |
+| CSV, 1,000,000 rows | 1,891 | 1,956 | 24,298 | 1,545 | 388 | 106 |
+| Web log regex, 200,000 lines | 1,046 | 1,038 | 1,875 | 252 | 329 | 22.3 |
+| Word frequency, 20 MB | 1,182 | 1,192 | 2,196 | 782 | 409 | 83.3 |
+| Format 1,000,000 lines | 360 | 319 | 1,575 | 1,041 | 440 | 88.3 |
+| HTML template, 100,000 rows | 110 | 101 | 229 | 352 | 335 | 16.3 |
+| Sort 1,000,000 integers | 418 | 507 | 586 | 598 | 167 | 81.1 |
+| Sort 1,000,000 strings | 554 | 596 | 694 | 578 | 337 | 341 |
+| HTTP server, requests/s | 42,501 | 42,816 | 28,440 | 11,342 | 28,580 | 57,234 |
+| 20 TLS 1.3 connections | 85.9 | 85.7 | n/a | 82.9 | 47.4 | 63.2 |
+| Hello world | 2.50 | 2.36 | 3.64 | 13.6 | 2.43 | 1.59 |
+| Micro: fib(30) | 90.4 | 170 | 592 | 125 | 6.77 | 4.06 |
+| Micro: n-body, 50,000 steps | 702 | 766 | 927 | 341 | 6.61 | 3.42 |
+
+n/a: the core of Tcl 8.6 has no JSON parser and no TLS. tclsh with tcllib and tcltls can do both, and the host had neither.
+
+What the numbers show:
+
+- **Against tclsh:** ztcl is faster on 8 of 9 tasks, 1.8 times at the median. It is 12.8 times as fast on CSV with the same Tcl script, where most of the time is in `regexp`. It is slower on base64 end to end (255 against 205 ms). In a later check with `clock microseconds`, the encode and the decode took 96 to 136 ms in ztcl and 172 to 204 ms in tclsh, but the `read` of the 16 MiB file on a binary channel took 127 to 166 ms in ztcl and 10 ms in tclsh ([#696](https://github.com/beetlebugorg/ztcl/issues/696)).
+- **Against Python:** ztcl is faster on JSON, string formatting, templates, the two sorts, and the HTTP server. Python is faster on base64, CSV, the web log regex (4.2 times), and word frequency (1.5 times). TLS is equal within the spread.
+- **Against Go and Zig:** Go is faster on 7 of 11 real tasks, and Zig on all of them. ztcl is faster than Go on JSON, string formatting, templates, and the HTTP server (Go with `GOMAXPROCS=1`). The Zig programs for the web log, CSV, and templates use a hand-written scan, because the Zig standard library has no regular expressions, CSV parser, or template engine.
+- **The JIT:** on the real tasks, the time is in built-in commands, and the JIT changes it by less than the spread. It halves recursive fib. On the n-body float loop, ztcl is behind Python (702 against 341 ms) and far behind Go and Zig.
+
+![Charts of base64, JSON, and CSV in each language](site/bench/data-light.svg)
+
+![Charts of the web log, word frequency, string formatting, and template tasks](site/bench/text-light.svg)
+
+![Charts of the two sort tasks](site/bench/sort-light.svg)
+
+![Charts of the HTTP server and TLS tasks](site/bench/net-light.svg)
+
+![A chart of hello world](site/bench/start-light.svg)
+
+![Charts of the micro benchmarks fib and n-body](site/bench/micro-light.svg)
+
+
+## Micro benchmarks against tclsh
+
 The sections "The interpreter", "A 10-million-pass integer loop", "Threads", "JSON", and "Size" come from a GitHub `ubuntu-latest` runner (4 vCPU, AMD EPYC), the median of 3 runs of the workflow `bench.yml` with `site` set, on 2026-11-27. The three runs had three CPU models: AMD EPYC 9V45, 9V74, and 7763. Each build is `ReleaseFast` for the CPU of the runner, and `tclsh` 8.6.16 with Thread 2.8.11 is a build of the source release. The runner has no hardware counter for `perf`, so the instruction counts and the larger programs come from an Intel Core i7-6700K (4 cores, 8 hardware threads, 4.0 GHz, AVX2) on x86-64 Linux, on the date of each section. The scripts are in [`bench/`](../bench). Run them yourself:
 
 ```sh

@@ -266,7 +266,8 @@ def main():
         "cpu\t%s, %d logical CPUs" % (cpu_model(), os.cpu_count()),
         "os\t%s %s" % (platform.system(), platform.release()),
         "load_start\t%s" % loadavg(),
-        "ztcl\t%s" % version([a.ztcl, "--version"]),
+        "ztcl\t" + subprocess.run([a.ztcl, "--allow", "channels", "--tclsh"], input="puts [info patchlevel]", capture_output=True, text=True).stdout.strip()
+        + ", commit " + subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
         "tclsh\t" + subprocess.run([a.tclsh], input="puts [info patchlevel]", capture_output=True, text=True).stdout.strip(),
         "python\t%s" % version([a.python, "-V"]),
         "go\t%s" % version([a.go, "version"]),

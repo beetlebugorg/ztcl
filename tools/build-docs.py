@@ -450,9 +450,13 @@ class Build:
         self.files_of[page] = self.page_files
         body = self.md.renderer.render(tokens, self.md.options, {})
         body = body.replace("<table>", '<div class="table"><table>').replace("</table>", "</table></div>")
-        # A chart of docs/site/bench/ in a <picture> of a Markdown page goes
-        # to assets/bench/ of the site.
-        body = re.sub(r'(src|srcset)="(?:\.\./)*(?:docs/)?site/bench/', lambda m: f'{m.group(1)}="{rel(page, "")}assets/bench/', body)
+        # A chart of docs/site/bench/ (an image of its light form in the
+        # Markdown) becomes a <picture> of assets/bench/ with its dark form.
+        def chart(m):
+            src = f'{rel(page, "")}assets/bench/{m.group(1)}'
+            return (f'<picture><source media="(prefers-color-scheme: dark)" srcset="{src}-dark.svg">'
+                    f'<img class="chart-img" src="{src}-light.svg" alt="{m.group(2)}" loading="lazy"></picture>')
+        body = re.sub(r'<img src="(?:\.\./)*(?:docs/)?site/bench/([\w-]+)-light\.svg" alt="([^"]*)"\s*/?>', chart, body)
         return title or src, self.alerts(body)
 
     def link(self, src, page, href):

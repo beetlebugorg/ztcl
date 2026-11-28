@@ -1,10 +1,11 @@
 # ztcl
 
-A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 9.1 scripts, and Tcl 8.6 scripts with `--tcl 8.6`, with exact compute and memory limits, a JIT compiler that is on by default, real threads, and a WebAssembly build for the browser.
+Modern Tcl for the AI era. ztcl is an alternative implementation of Tcl in Zig, built to be the fastest and most complete one. It runs Tcl 9.1 scripts, and Tcl 8.6 scripts with `--tcl 8.6`, with exact compute and memory limits, a JIT compiler that is on by default, real threads, microVM isolation, and a WebAssembly build for the browser. The current release is 1.0.0-beta.1.
 
 **Docs:** https://beetlebug.org/ztcl/ · **Playground:** https://beetlebug.org/ztcl/playground/
 
-- **Fast.** The bytecode interpreter is 1.2 to 2.7 times as fast as `tclsh` 8.6.16 on the benchmark scripts. With the JIT, an integer loop is 50 times as fast (a GitHub `ubuntu-latest` runner, 2026-11-27, [Performance](docs/performance.md)).
+- **Designed with AI in mind.** `ztcl::agent` runs an LLM agent loop in an isolated thread with tools that are Tcl commands. A thread can run in its own microVM. `ztcl debug` serves MCP tools to an agent.
+- **Measured on real tasks.** On 9 real-world tasks, ztcl is 1.8 times as fast as `tclsh` 8.6.16 at the median, and slower on one (base64 end to end). It is faster than Python 3.14 on 6 of 11 tasks, and slower on base64, CSV, a regex over a web log, and word frequency. Go is faster on 7 of 11, and Zig on all 11. [bench/compare](bench/compare/README.md) has the programs, and [Performance](docs/performance.md) has the charts. A 50 times speedup over `tclsh` holds only for a narrow micro benchmark: an integer loop in one proc.
 - **Safe by default.** A script has no file, socket, or process access until your program turns on a capability. The compute limit and the memory cap are exact.
 - **Small.** One static binary. Its one dependency outside the Zig standard library is libghostty-vt, which the build compiles from source into the binary for `ztcl::vt`.
 - **Portable.** Linux, macOS, Windows, WebAssembly in the browser, and Node.js.

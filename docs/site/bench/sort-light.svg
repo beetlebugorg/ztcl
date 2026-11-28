@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="694" viewBox="0 0 600 694" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" role="img">
+<title>Sorting: ztcl against Tcl 8.6, Python, Go, and Zig</title>
+<rect width="600" height="694" fill="#ffffff"/>
+<text x="20" y="36" font-size="19" font-weight="700" fill="#1f2328">Sorting</text>
+<text x="20" y="56" font-size="12" fill="#59636e">The median of 15 runs of the whole process. The whisker is the interquartile range.</text>
+<text x="20" y="72" font-size="12" fill="#59636e">Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz, 2026-11-27, load average 4.4 to 3.4.</text>
+<text x="20" y="108" font-size="15" font-weight="600" fill="#1f2328">Read and sort 1,000,000 integers</text>
+<text x="20" y="126" font-size="12" fill="#59636e">wall clock ms, lower is better</text>
+<line x1="82" y1="300.0" x2="568" y2="300.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="304.0" font-size="11" text-anchor="end" fill="#59636e">0</text>
+<line x1="82" y1="262.0" x2="568" y2="262.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="266.0" font-size="11" text-anchor="end" fill="#59636e">200</text>
+<line x1="82" y1="224.0" x2="568" y2="224.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="228.0" font-size="11" text-anchor="end" fill="#59636e">400</text>
+<line x1="82" y1="186.0" x2="568" y2="186.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="190.0" font-size="11" text-anchor="end" fill="#59636e">600</text>
+<line x1="82" y1="148.0" x2="568" y2="148.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="152.0" font-size="11" text-anchor="end" fill="#59636e">800</text>
+<text x="122.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">ztcl</text>
+<rect x="97.4" y="220.6" width="50.2" height="79.4" fill="#0969da" fill-opacity="0.35" stroke="#0969da" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="122.5" y1="222.2" x2="122.5" y2="199.3" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="117.5" y1="222.2" x2="127.5" y2="222.2" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="117.5" y1="199.3" x2="127.5" y2="199.3" stroke="#1f2328" stroke-width="1.5"/>
+<text x="122.5" y="193.3" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">418</text>
+<text x="203.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">ztcl no JIT</text>
+<rect x="178.4" y="203.7" width="50.2" height="96.3" fill="#54aeff" fill-opacity="0.35" stroke="#54aeff" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="203.5" y1="217.9" x2="203.5" y2="197.0" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="198.5" y1="217.9" x2="208.5" y2="217.9" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="198.5" y1="197.0" x2="208.5" y2="197.0" stroke="#1f2328" stroke-width="1.5"/>
+<text x="203.5" y="191.0" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">507</text>
+<text x="284.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">tclsh 8.6</text>
+<rect x="259.4" y="188.6" width="50.2" height="111.4" fill="#6e7781"/>
+<line x1="284.5" y1="191.5" x2="284.5" y2="184.8" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="279.5" y1="191.5" x2="289.5" y2="191.5" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="279.5" y1="184.8" x2="289.5" y2="184.8" stroke="#1f2328" stroke-width="1.5"/>
+<text x="284.5" y="178.8" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">586</text>
+<text x="365.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">Python</text>
+<rect x="340.4" y="186.4" width="50.2" height="113.6" fill="#9a6700" fill-opacity="0.35" stroke="#9a6700" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="365.5" y1="193.4" x2="365.5" y2="171.8" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="360.5" y1="193.4" x2="370.5" y2="193.4" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="360.5" y1="171.8" x2="370.5" y2="171.8" stroke="#1f2328" stroke-width="1.5"/>
+<text x="365.5" y="165.8" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">598</text>
+<text x="446.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">Go</text>
+<rect x="421.4" y="268.2" width="50.2" height="31.8" fill="#1a7f37" fill-opacity="0.35" stroke="#1a7f37" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="446.5" y1="273.6" x2="446.5" y2="266.4" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="441.5" y1="273.6" x2="451.5" y2="273.6" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="441.5" y1="266.4" x2="451.5" y2="266.4" stroke="#1f2328" stroke-width="1.5"/>
+<text x="446.5" y="260.4" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">167</text>
+<text x="527.5" y="316" font-size="12" text-anchor="middle" fill="#1f2328">Zig</text>
+<rect x="502.4" y="284.6" width="50.2" height="15.4" fill="#bc4c00" fill-opacity="0.35" stroke="#bc4c00" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="527.5" y="277.5" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">81.1</text>
+<text x="20" y="380" font-size="15" font-weight="600" fill="#1f2328">Read and sort 1,000,000 strings</text>
+<text x="20" y="398" font-size="12" fill="#59636e">wall clock ms, lower is better</text>
+<line x1="82" y1="572.0" x2="568" y2="572.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="576.0" font-size="11" text-anchor="end" fill="#59636e">0</text>
+<line x1="82" y1="534.0" x2="568" y2="534.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="538.0" font-size="11" text-anchor="end" fill="#59636e">250</text>
+<line x1="82" y1="496.0" x2="568" y2="496.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="500.0" font-size="11" text-anchor="end" fill="#59636e">500</text>
+<line x1="82" y1="458.0" x2="568" y2="458.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="462.0" font-size="11" text-anchor="end" fill="#59636e">750</text>
+<line x1="82" y1="420.0" x2="568" y2="420.0" stroke="#d1d9e0" stroke-width="1"/>
+<text x="76" y="424.0" font-size="11" text-anchor="end" fill="#59636e">1,000</text>
+<text x="122.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">ztcl</text>
+<rect x="97.4" y="487.8" width="50.2" height="84.2" fill="#0969da" fill-opacity="0.35" stroke="#0969da" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="122.5" y1="492.9" x2="122.5" y2="472.3" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="117.5" y1="492.9" x2="127.5" y2="492.9" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="117.5" y1="472.3" x2="127.5" y2="472.3" stroke="#1f2328" stroke-width="1.5"/>
+<text x="122.5" y="466.3" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">554</text>
+<text x="203.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">ztcl no JIT</text>
+<rect x="178.4" y="481.4" width="50.2" height="90.6" fill="#54aeff" fill-opacity="0.35" stroke="#54aeff" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="203.5" y1="493.6" x2="203.5" y2="470.2" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="198.5" y1="493.6" x2="208.5" y2="493.6" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="198.5" y1="470.2" x2="208.5" y2="470.2" stroke="#1f2328" stroke-width="1.5"/>
+<text x="203.5" y="464.2" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">596</text>
+<text x="284.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">tclsh 8.6</text>
+<rect x="259.4" y="466.5" width="50.2" height="105.5" fill="#6e7781" fill-opacity="0.35" stroke="#6e7781" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="284.5" y1="468.9" x2="284.5" y2="446.5" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="279.5" y1="468.9" x2="289.5" y2="468.9" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="279.5" y1="446.5" x2="289.5" y2="446.5" stroke="#1f2328" stroke-width="1.5"/>
+<text x="284.5" y="440.5" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">694</text>
+<text x="365.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">Python</text>
+<rect x="340.4" y="484.2" width="50.2" height="87.8" fill="#9a6700"/>
+<line x1="365.5" y1="488.7" x2="365.5" y2="480.5" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="360.5" y1="488.7" x2="370.5" y2="488.7" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="360.5" y1="480.5" x2="370.5" y2="480.5" stroke="#1f2328" stroke-width="1.5"/>
+<text x="365.5" y="474.5" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">578</text>
+<text x="446.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">Go</text>
+<rect x="421.4" y="520.8" width="50.2" height="51.2" fill="#1a7f37" fill-opacity="0.35" stroke="#1a7f37" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="446.5" y1="525.6" x2="446.5" y2="518.3" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="441.5" y1="525.6" x2="451.5" y2="525.6" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="441.5" y1="518.3" x2="451.5" y2="518.3" stroke="#1f2328" stroke-width="1.5"/>
+<text x="446.5" y="512.3" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">337</text>
+<text x="527.5" y="588" font-size="12" text-anchor="middle" fill="#1f2328">Zig</text>
+<rect x="502.4" y="520.2" width="50.2" height="51.8" fill="#bc4c00" fill-opacity="0.35" stroke="#bc4c00" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="527.5" y1="524.4" x2="527.5" y2="517.3" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="522.5" y1="524.4" x2="532.5" y2="524.4" stroke="#1f2328" stroke-width="1.5"/>
+<line x1="522.5" y1="517.3" x2="532.5" y2="517.3" stroke="#1f2328" stroke-width="1.5"/>
+<text x="527.5" y="511.3" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">341</text>
+<rect x="20" y="641" width="14" height="12" fill="#59636e" fill-opacity="0.35" stroke="#59636e" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="40" y="652" font-size="12" fill="#59636e">A pale, dashed bar is noisy: its interquartile range is over 10 % of its median.</text>
+<text x="40" y="669" font-size="12" fill="#59636e">Data: bench/compare/results.tsv.</text>
+</svg>
