@@ -98,6 +98,21 @@ test "ztcl::wasm: memory" {
     try std.testing.expectEqualStrings("-1", got);
 }
 
+// (module (func (export "f")))
+const bare_mod = "0061736d0100000001040160000003020100070501016600000a040102000b";
+
+test "ztcl::wasm: the order and the text of argument errors (#714)" {
+    try expect("ztcl::wasm memory $w read -1 4", "!the range -1 to 3 is outside the memory of 65536 bytes");
+    try expect("ztcl::wasm package x.wasm Add -wasi", "!wrong # args: should be \"ztcl::wasm package fileName ?prefix? ?-wasi dict?\"");
+    try expect("catch {ztcl::wasm call $w div -bogus 1 2} msg o; list $msg [dict get $o -errorcode]", "{bad option \"-bogus\": must be -limit, -raw, or --} {TCL LOOKUP INDEX option}");
+    try expect("ztcl::wasm call $w div -7 2", "-3");
+    try expect("catch {ztcl::wasm call $w div -inf 1} msg; string match {bad option*} $msg", "0");
+    const bare = "set b [ztcl::wasm instantiate [ztcl::wasm new [binary decode hex " ++ bare_mod ++ "]]]\n";
+    try expect(bare ++ "ztcl::wasm memory $b bogus", "!unknown subcommand \"bogus\": must be grow, read, size, string, or write");
+    try expect(bare ++ "ztcl::wasm memory $b s 16", "!unknown subcommand \"s\": must be grow, read, size, string, or write");
+    try expect(bare ++ "ztcl::wasm memory $b size", "!the instance has no memory");
+}
+
 test "ztcl::wasm: capabilities" {
     try expect("ztcl::wasm load x.wasm", "!ztcl::wasm load needs the capability file");
     try expect("ztcl::wasm instantiate $m -wasi {dirs {. .}}", "!the WASI option dirs needs the capability file");

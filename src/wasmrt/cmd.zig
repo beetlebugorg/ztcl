@@ -621,6 +621,10 @@ fn cmdCall(it: *Interp, argv: []const Value) Error!Value {
         } else if (eql(s, "--")) {
             i += 1;
             break;
+        } else if (s.len > 1 and s[0] == '-' and std.ascii.isAlphabetic(s[1]) and !isNumber(s)) {
+            // A negative number, `-inf`, and `-nan` are arguments. The
+            // other words of a dash and a letter are options.
+            return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -limit, -raw, or --", .{s});
         } else break;
     }
     const ft = st.store.funcs.items[addr].type;
@@ -703,7 +707,7 @@ fn memOf(it: *Interp, rec: *Rec) Error!*exec.Memory {
 
 fn range(it: *Interp, m: *const exec.Memory, addr_v: Value, len: u64) Error!usize {
     const addr = try it.int(addr_v);
-    if (addr < 0 or @as(u64, @intCast(addr)) + len > m.bytes.len) return it.failCode("ZTCL WASM MEMORY", "the range {d} to {d} is outside the memory of {d} bytes", .{ addr, @as(u64, @intCast(@max(addr, 0))) + len, m.bytes.len });
+    if (addr < 0 or @as(u64, @intCast(addr)) + len > m.bytes.len) return it.failCode("ZTCL WASM MEMORY", "the range {d} to {d} is outside the memory of {d} bytes", .{ addr, @as(i128, addr) + len, m.bytes.len });
     return @intCast(addr);
 }
 
@@ -711,8 +715,12 @@ fn cmdMemory(it: *Interp, argv: []const Value) Error!Value {
     const use = "ztcl::wasm memory instance size|read|write|string|grow ?arg ...?";
     if (argv.len < 4) return it.wrongArgs(use);
     const rec = try findInst(it, argv[2]);
-    const m = try memOf(it, rec);
     const sub = try it.str(argv[3]);
+    const known = [_][]const u8{ "grow", "read", "size", "string", "write" };
+    for (known) |k| {
+        if (eql(sub, k)) break;
+    } else return memSubError(it, sub);
+    const m = try memOf(it, rec);
     const st = try state(it);
     if (eql(sub, "size")) {
         if (argv.len != 4) return it.wrongArgs("ztcl::wasm memory instance size");
@@ -762,7 +770,16 @@ fn cmdMemory(it: *Interp, argv: []const Value) Error!Value {
         @memcpy(m.bytes[at .. at + data.len], data);
         return .{ .int = @intCast(data.len) };
     }
+    return memSubError(it, sub);
+}
+
+fn memSubError(it: *Interp, sub: []const u8) Error {
     return it.failCode("TCL LOOKUP INDEX subcommand", "unknown subcommand \"{s}\": must be grow, read, size, string, or write", .{sub});
+}
+
+fn isNumber(s: []const u8) bool {
+    _ = std.fmt.parseFloat(f64, s) catch return false;
+    return true;
 }
 
 /// Uses one compute unit for each 4,096 bytes of a copy.
@@ -916,7 +933,8 @@ fn cmdPackage(it: *Interp, argv: []const Value) Error!Value {
     var o: InstOpts = .{ .wasi = .{} };
     while (i < argv.len) : (i += 2) {
         const k = try it.str(argv[i]);
-        if (!eql(k, "-wasi") or i + 1 >= argv.len) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -wasi", .{k});
+        if (!eql(k, "-wasi")) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -wasi", .{k});
+        if (i + 1 >= argv.len) return it.wrongArgs("ztcl::wasm package fileName ?prefix? ?-wasi dict?");
         o.wasi = try wasiOptions(it, argv[i + 1]);
     }
     const name = try initName(it, file, prefix);
