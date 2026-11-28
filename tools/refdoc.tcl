@@ -135,7 +135,7 @@ proc refdoc::new {kind name} {
     variable N
     variable seq
     set id [incr seq]
-    set N($id) [dict create kind $kind name $name]
+    set N($id) [dict create node $kind name $name]
     return $id
 }
 
@@ -170,11 +170,11 @@ proc refdoc::decl {key args} {
     variable doc
     set how [dict get $KEYS $key]
     if {$key eq "command"} {
-        if {[llength $stack]} { error "command inside a [get [lindex $stack end] kind]" }
+        if {[llength $stack]} { error "command inside a [get [lindex $stack end] node]" }
     } else {
         if {![llength $stack]} { error "$key outside of command" }
         set id [lindex $stack end]
-        set kind [get $id kind]
+        set kind [get $id node]
         if {$key ni $ALLOWED($kind)} { error "$key is not a key of $kind [get $id name]" }
     }
     switch -- $how {
@@ -353,7 +353,7 @@ proc refdoc::one_sentence {text} {
 
 proc refdoc::lint_node {id where} {
     variable REQUIRED
-    set kind [get $id kind]
+    set kind [get $id node]
     set problems {}
     foreach k $REQUIRED($kind) {
         if {![has $id $k]} { lappend problems "$where: no `$k`" }
