@@ -2686,7 +2686,9 @@ fn checkFrameA64() !void {
     for (want, 0..) |w, k| try testing.expectEqual(w, std.mem.readInt(u32, f.base[4 * k ..][0..4], .little));
 }
 
-/// True when an address is inside a mapping of /proc/self/maps.
+/// True when an address is inside a mapping of /proc/self/maps with a
+/// right to read, write, or run. A freed region of a Debug build stays
+/// as a slot with no access (`space` in jit/mem.zig).
 fn mapped(addr: usize) !bool {
     const text = try readMaps(testing.allocator);
     defer testing.allocator.free(text);
@@ -2697,7 +2699,7 @@ fn mapped(addr: usize) !bool {
         const dash = std.mem.indexOfScalar(u8, range, '-') orelse continue;
         const start = try std.fmt.parseInt(usize, range[0..dash], 16);
         const end = try std.fmt.parseInt(usize, range[dash + 1 ..], 16);
-        if (addr >= start and addr < end) return true;
+        if (addr >= start and addr < end) return !std.mem.startsWith(u8, line[sp + 1 ..], "---");
     }
     return false;
 }
@@ -3131,4 +3133,26 @@ test "tier 2: the plan reads no table of an instruction that no path reaches" {
     try testing.expectError(error.TclError, it.eval("f 100000"));
     try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
+}
+
+test "a stack trace through JIT code does not load the unwind tables again" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    // An allocator that records a stack trace for each allocation, as the
+    // testing allocator of a debug build does.
+    var sa: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .stack_trace_frames = 8 });
+    defer _ = sa.deinit();
+    var it: Interp = undefined;
+    try it.init(sa.allocator());
+    defer it.deinit();
+    it.disableJit();
+    if (!it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    _ = try it.eval("proc f {n} {set l {}; for {set i 0} {$i < $n} {incr i} {lappend l [string repeat x [expr {$i % 7 + 20}]]}; return [llength $l]}");
+    _ = try it.eval("f 10");
+    const before = residentKib() orelse return error.SkipZigTest;
+    _ = try it.eval("f 1000");
+    const grew = (residentKib() orelse 0) -| before;
+    // Before the slots of `space` (jit/mem.zig) it grew by about 21 MiB:
+    // std.debug loaded the unwind tables again for each trace. With the
+    // JIT off it grows by about 0.1 MiB, and with the slots by 0.7 MiB.
+    if (comptime builtin.mode == .debug) try testing.expect(grew < 4096);
 }

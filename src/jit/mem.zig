@@ -3,6 +3,13 @@
 //!
 //! On Linux, the region is one reservation of address space with no
 //! access, with one more page with no access before it and after it.
+//! A Debug build gets the reservation from `space`, an array in the
+//! .bss of the program, while a slot is free. Then the addresses of the
+//! JIT code are in a load segment of the program, so a stack trace
+//! through JIT code (the testing allocator records one for each
+//! allocation) finds the module of the program. With an address in no
+//! module, std.debug lists the modules again and loads their unwind
+//! tables again into an arena that keeps them, about 1 MB each time.
 //! `append` copies one function to the next free pages in three steps:
 //!
 //! 1. `mprotect` the pages to read and write.
@@ -191,6 +198,50 @@ pub fn checkClosed() void {
     }
 }
 
+/// The slots of `space`: 8 of 32 MiB, 256 MiB of address space in the
+/// .bss of a Debug build on Linux, with no memory until a page is used.
+const space_on = builtin.mode == .debug and builtin.os.tag == .linux and !on_uk;
+const space_slot: usize = 32 << 20;
+const space_slots = 8;
+var space: [if (space_on) space_slots * space_slot else 0]u8 align(1 << 16) linksection(if (space_on) ".bss.ztcl_jit" else null) = undefined;
+/// One bit for each slot in use.
+var space_used: std.atomic.Value(u32) = .init(0);
+
+/// Takes a free slot of `space` with no access, or null.
+fn spaceTake(total: usize) ?[*]u8 {
+    if (comptime !space_on) return null;
+    if (total > space_slot) return null;
+    var used = space_used.load(.acquire);
+    while (true) {
+        const free = ~used & ((1 << space_slots) - 1);
+        if (free == 0) return null;
+        const bit: u5 = @intCast(@ctz(free));
+        used = space_used.cmpxchgWeak(used, used | (@as(u32, 1) << bit), .acq_rel, .acquire) orelse {
+            const at: [*]u8 = @ptrCast(&space[@as(usize, bit) * space_slot]);
+            // A new mapping with no access replaces the pages of the .bss.
+            const rc = linux.mmap(at, space_slot, .{}, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .NORESERVE = true, .FIXED = true }, -1, 0);
+            if (linux.errno(rc) != .SUCCESS) {
+                _ = space_used.fetchAnd(~(@as(u32, 1) << bit), .acq_rel);
+                return null;
+            }
+            return at;
+        };
+    }
+}
+
+/// Gives a slot back, with new pages with no access. False when `start`
+/// is not in `space`.
+fn spaceGive(start: [*]u8) bool {
+    if (comptime !space_on) return false;
+    const a = @intFromPtr(start);
+    const base = @intFromPtr(&space);
+    if (a < base or a >= base + space.len) return false;
+    const bit: u5 = @intCast((a - base) / space_slot);
+    _ = linux.mmap(start, space_slot, .{}, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .NORESERVE = true, .FIXED = true }, -1, 0);
+    _ = space_used.fetchAnd(~(@as(u32, 1) << bit), .acq_rel);
+    return true;
+}
+
 pub const Region = struct {
     /// The first usable page. The guard page is before it.
     base: [*]u8,
@@ -226,6 +277,7 @@ pub const Region = struct {
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
         const total = std.math.add(usize, usable, 2 * page) catch return null;
+        if (spaceTake(total)) |start| return .{ .base = start + page, .limit = usable, .page = page };
         const rc = linux.mmap(null, total, .{}, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .NORESERVE = true }, -1, 0);
         if (linux.errno(rc) != .SUCCESS) return null;
         const start: [*]u8 = @ptrFromInt(rc);
@@ -331,7 +383,9 @@ pub const Region = struct {
         if (comptime on_win) {
             r.unwind.deinit();
             _ = win.VirtualFree(r.base - 2 * r.page, 0, win.mem_release);
-        } else if (comptime darwin) _ = c.munmap(start, r.limit + 2 * r.page) else _ = linux.munmap(start, r.limit + 2 * r.page);
+        } else if (comptime darwin) {
+            _ = c.munmap(start, r.limit + 2 * r.page);
+        } else if (!spaceGive(start)) _ = linux.munmap(start, r.limit + 2 * r.page);
         r.* = undefined;
     }
 
