@@ -362,10 +362,78 @@ fn decodeTable(it: *Interp, c: *Channel, e: enc.Encoding, raw: []const u8, end: 
     return .{ .text = try translate(it, c, out.items, false), .used = got.used };
 }
 
+/// Reserves room in the read buffer for the rest of a regular file, so
+/// that a `read` to the end of the file grows the buffer one time and
+/// reads it with one system call. A channel whose `seek` fails, such as
+/// a FIFO, keeps the reads of 16 KiB.
+fn reserveRest(it: *Interp, c: *Channel) Error!void {
+    if (c.kind != .file or c.mem or c.filter != null or c.pty or c.hit_eof) return;
+    if (it.tape != null) return;
+    const cur = switch (sys.seek(c.fd, 0, 1)) {
+        .at => |p| p,
+        .err => return,
+    };
+    const end = switch (sys.seek(c.fd, 0, 2)) {
+        .at => |p| p,
+        .err => return,
+    };
+    _ = sys.seek(c.fd, cur, 0);
+    if (end <= cur) return;
+    const rest: usize = @intCast(@min(end - cur, 1 << 30));
+    // The extra 16 KiB is the room of the read that finds the end.
+    try c.rbuf.ensureUnusedCapacity(it.alloc(), rest + 16384);
+}
+
+/// The UTF-8 text of bytes with one character for each byte (the
+/// `binary` encoding with the translation `lf`). A first pass counts the
+/// bytes of 0x80 or more, 32 at a time, for the exact size of the
+/// output. A block of 32 bytes below 0x80 goes to the output as it is.
+/// The other bytes go through a loop with no branch on the byte.
+fn latin1ToUtf8(a: std.mem.Allocator, raw: []const u8) Error![]const u8 {
+    const V = @Vector(32, u8);
+    const top: V = @splat(0x80);
+    var high: usize = 0;
+    var i: usize = 0;
+    while (i + 32 <= raw.len) : (i += 32) {
+        const v: V = raw[i..][0..32].*;
+        high += @popCount(@as(u32, @bitCast(v >= top)));
+    }
+    for (raw[i..]) |b| high += b >> 7;
+    // One byte more: the loop writes the second byte of each input byte.
+    const out = try a.alloc(u8, raw.len + high + 1);
+    if (high == 0) {
+        @memcpy(out[0..raw.len], raw);
+        return out[0..raw.len];
+    }
+    var o: usize = 0;
+    i = 0;
+    while (i < raw.len) {
+        const n = @min(32, raw.len - i);
+        if (n == 32) {
+            const v: V = raw[i..][0..32].*;
+            if (@reduce(.Max, v) < 0x80) {
+                @memcpy(out[o..][0..32], raw[i..][0..32]);
+                o += 32;
+                i += 32;
+                continue;
+            }
+        }
+        for (raw[i .. i + n]) |b| {
+            const h: usize = b >> 7;
+            out[o] = if (h != 0) 0xC0 | (b >> 6) else b;
+            out[o + 1] = 0x80 | (b & 63);
+            o += 1 + h;
+        }
+        i += n;
+    }
+    return out[0..o];
+}
+
 /// The text of input bytes after the translation of line ends. With
 /// `binary`, each byte is one character.
 fn translate(it: *Interp, c: *const Channel, raw: []const u8, binary: bool) Error![]const u8 {
     const a = it.alloc();
+    if (binary and c.input == .lf) return latin1ToUtf8(a, raw);
     var out: std.ArrayList(u8) = .empty;
     try out.ensureTotalCapacity(a, raw.len);
     var i: usize = 0;
@@ -1041,6 +1109,7 @@ fn cmdRead(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (n < 0) return it.fail("expected non-negative integer but got \"{s}\"", .{try it.str(args[1])});
         want = @intCast(n);
     }
+    if (want == null and c.blocking) try reserveRest(it, c);
     while (want == null or c.rbuf.items.len - c.rpos < want.?) {
         if (!try fill(it, c)) break;
         // A channel that does not block stops at a short read, as Tcl
@@ -1593,4 +1662,24 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("chan", cmdChan);
     try it.register("source", cmdSource);
     try it.register("encoding", @import("enc.zig").cmdEncoding);
+}
+
+test "latin1ToUtf8 gives the UTF-8 of each byte at each length and offset" {
+    const a = std.testing.allocator;
+    var raw: [300]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(696);
+    for (&raw, 0..) |*b, k| b.* = if (k < 100) @intCast(k % 128) else prng.random().int(u8);
+    var len: usize = 0;
+    while (len <= raw.len) : (len += 7) {
+        const got = try latin1ToUtf8(a, raw[0..len]);
+        defer a.free(got.ptr[0 .. got.len + 1]);
+        var want: std.ArrayList(u8) = .empty;
+        defer want.deinit(a);
+        for (raw[0..len]) |b| {
+            var buf: [2]u8 = undefined;
+            const n = try std.unicode.utf8Encode(b, &buf);
+            try want.appendSlice(a, buf[0..n]);
+        }
+        try std.testing.expectEqualSlices(u8, want.items, got);
+    }
 }
