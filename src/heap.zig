@@ -97,6 +97,12 @@ fn classOf(len: usize) usize {
 pub const dead_byte: u8 = 0xDD;
 const fill_dead = builtin.mode == .debug or builtin.mode == .safe;
 
+/// A span record and its two bitmaps of u64 are one allocation. On wasm32
+/// the record can have an alignment of 4 and a size that is not a multiple
+/// of 8, so the bitmaps start at the next multiple of 8 after it.
+const record_align: std.mem.Alignment = .fromByteUnits(@max(@alignOf(Span), @alignOf(u64)));
+const span_bits_at = std.mem.alignForward(usize, @sizeOf(Span), @alignOf(u64));
+
 pub const Span = struct {
     base: usize,
     /// The bytes of the span.
@@ -403,9 +409,9 @@ pub const Heap = struct {
 
     /// Allocates a span record with its two bitmaps after it.
     fn makeSpan(h: *Heap, words: usize, t: Span) ?*Span {
-        const raw = h.backing.rawAlloc(@sizeOf(Span) + words * 16, .of(Span), 0) orelse return null;
+        const raw = h.backing.rawAlloc(span_bits_at + words * 16, record_align, 0) orelse return null;
         const s: *Span = @ptrCast(@alignCast(raw));
-        const bits: [*]u64 = @ptrCast(@alignCast(raw + @sizeOf(Span)));
+        const bits: [*]u64 = @ptrCast(@alignCast(raw + span_bits_at));
         s.* = t;
         s.nwords = @intCast(words);
         s.free = bits[0..words];
@@ -417,7 +423,7 @@ pub const Heap = struct {
 
     fn freeMeta(h: *Heap, s: *Span) void {
         const raw: [*]u8 = @ptrCast(s);
-        h.backing.rawFree(raw[0 .. @sizeOf(Span) + s.nwords * 16], .of(Span), 0);
+        h.backing.rawFree(raw[0 .. span_bits_at + s.nwords * 16], record_align, 0);
     }
 
     fn freeSpan(h: *Heap, s: *Span) void {
