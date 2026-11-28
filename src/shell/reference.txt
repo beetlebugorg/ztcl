@@ -662,6 +662,17 @@ sub: ztcl::meter run NAME SCRIPT | Runs a script in the current interpreter and 
 sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | Gives the usage record of a meter: one line of JSON in a hash chain.
 sub: ztcl::meter verify RECORD PUBLICKEY | Checks the signature of a record.
 sub: ztcl::meter pubkey SEED | Gives the hex public key of a seed.
+== ztcl::probe
+syn: ztcl::probe SUBCOMMAND ?ARG ...?
+sub: ztcl::probe add -proc NAME ?-line N? ?OPTION VALUE ...? | Adds a probe and gives its id.
+sub: ztcl::probe add -command NAME ?-leave? ?OPTION VALUE ...? | Records at each call of a command.
+sub: ztcl::probe add -var NAME ?-ops LIST? ?OPTION VALUE ...? | Records at each operation on a variable.
+sub: ztcl::probe add -error ?OPTION VALUE ...? | Records at the start of each error.
+sub: ztcl::probe records ?-probe ID? ?-since SEQ? ?-where EXPR? ?-first N? ?-last N? ?-json? | Gives the records that match, the oldest first.
+sub: ztcl::probe list | Gives a dict for each probe.
+sub: ztcl::probe remove ID|all | Removes a probe, or each probe.
+sub: ztcl::probe clear | Removes each record.
+sub: ztcl::probe configure ?-size N? ?-budget N? ?-maxlen N? | Gives or sets the size of the ring, the budget of a hit, and the length of a value.
 == ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
 syn: ztcl::text SUBCOMMAND ?ARG ...?
 sub: ztcl::text graphemes STRING | Gives the list of the grapheme clusters of a string.
@@ -703,8 +714,6 @@ sub: ztcl::wasm imports MODULE | Gives the module, the name, the kind, and the t
 sub: ztcl::wasm info MODULE | Gives a dict of the counts and the features of a module.
 sub: ztcl::wasm delete ?HANDLE ...? | Deletes modules and instances.
 sub: ztcl::wasm jit ?BOOLEAN? | Reads or sets the use of the JIT tier.
-== ztcl::probe
-syn: ztcl::probe subcommand ?arg ...?
 == ztcl::tls ztcl::tls::socket
 syn: ztcl::tls socket ?-servername name? ?-alpn protocols? ?-cadata pem? ?-verify boolean? host port
 sub: socket ?option value ...? host port | Opens the connection and gives the name of the channel.
