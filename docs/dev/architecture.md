@@ -69,7 +69,7 @@ Each area is one folder. The file names below are the target names. Phase 2 of #
 | `src/cmds/` | cmds | `cmds.zig`, `dict.zig`, `more.zig`, `extra.zig`, `format.zig`, `regex.zig`, `math9.zig`, `oo.zig`, `pkg.zig`, `tcl9.zig`, `child.zig`, `disasm.zig`, `agent.zig`, `hello.zig` |
 | `src/meter/` | meter | `meter.zig`, `metercmd.zig` |
 | `src/sys/` | sys | `sys.zig`, `sys_windows.zig`, `sys_wasi.zig`, `sys_wasi3.zig`, `wasi/p3.zig`, `wasi/async.zig` |
-| `src/os/` | os | `chan.zig`, `chanrefl.zig`, `enc.zig`, `filecmd.zig`, `fsroot*.zig`, `proc*.zig`, `pty*.zig`, `sock.zig`, `serial.zig`, `event.zig`, `clock.zig`, `launch.zig`, `notify*.zig`, `watch*.zig`, `dbus.zig`, `vfs.zig`, `mac.zig` |
+| `src/os/` | os | `chan.zig`, `chanrefl.zig`, `chanxform.zig`, `enc.zig`, `filecmd.zig`, `fsroot*.zig`, `proc*.zig`, `pty*.zig`, `sock.zig`, `serial.zig`, `event.zig`, `clock.zig`, `launch.zig`, `notify*.zig`, `watch*.zig`, `dbus.zig`, `vfs.zig`, `mac.zig` |
 | `src/os/windows/` | os | `winreg.zig`, `wincred.zig`, `winfolder.zig` |
 | `src/thread/` | thread | `thread.zig`, `threadcmd.zig`, `tpool.zig`, `tsv.zig`, `tsync.zig`, `tchan.zig` |
 | `src/isolate/` | isolate | `isobroker.zig`, `isoproto.zig`, `isothread.zig`, `isovm.zig`, `isolate_linux.zig`, `isolate_mac.zig`, `isolate_windows.zig` |

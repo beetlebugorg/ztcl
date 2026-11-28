@@ -3995,7 +3995,7 @@ test "chan truncate, chan isbinary, and the messages of chan (#690, #692)" {
         \\puts -nonewline $f abcd; chan tr $f; close $f; lappend r [file size t.txt]
         \\set f [open t.txt r]; seek $f 2; set t [tell $f]; close $f; lappend r $t
     )));
-    try std.testing.expectEqualStrings("{unknown or ambiguous subcommand \"bogus\": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus}", try it.str(try it.eval("catch {chan bogus} m o; list $m [dict get $o -errorcode]")));
+    try std.testing.expectEqualStrings("{unknown or ambiguous subcommand \"bogus\": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, pop, postevent, push, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus}", try it.str(try it.eval("catch {chan bogus} m o; list $m [dict get $o -errorcode]")));
     try std.testing.expectEqualStrings("wrong # args: should be \"chan close channelId ?direction?\"", try it.str(try it.eval("catch {chan close} m; set m")));
     try it.setTclVersion(.v9_1);
     try std.testing.expectEqualStrings("0 1", try it.str(try it.eval("set f [open t.txt w]; set r [chan isbinary $f]; fconfigure $f -translation binary; lappend r [chan isbinary $f]; close $f; set r")));
@@ -4073,4 +4073,68 @@ test "chan create and chan postevent give the results of tclsh 8.6.16 (#690)" {
         \\set r
     ));
     try std.testing.expectEqualStrings("line1 {line2\n} 1 hello 42 {} bar {-blocking 1 -buffering full -buffersize 4096 -encoding utf-8 -eofchar {{} {}} -translation {auto lf} -foo bar} {0 {} -} 1 {{initialize {read write}} {read 4096} {read 4096} {write hello} {seek 0 current} {seek 10 start} {cget -foo} {configure -foo baz} cgetall {blocking 0} {watch read} {watch {}} finalize} {1 boom NONE} {1 {channel \"rc1\" wasn't opened for writing} NONE} {1 {error during seek on \"rc1\": invalid argument} {POSIX EINVAL {invalid argument}}} {0 -1 -} {1 {bad event \"bogus\": must be read or write} {TCL LOOKUP INDEX event bogus}} {1 {tried to post events channel \"rc1\" is not interested in} NONE} {1 {bad event list: is empty} NONE} {1 {read delivered more than requested} NONE} {1 {write wrote nothing} NONE} {0 {} -} {1 fin NONE} {1 {can not find channel named \"rc4\"} {TCL LOOKUP CHANNEL rc4}} {1 {chan handler \"d {initialize finalize watch read}\" lacks a \"write\" method} NONE} {1 {chan handler \"d {initialize finalize read}\" does not support all required methods} NONE} {1 {chan handler \"d {initialize finalize watch read cget}\" supports \"cget\" but not \"cgetall\"} NONE} {1 {bad mode \"bogus\": must be read or write} {TCL LOOKUP INDEX mode bogus}} {1 {chan handler \"d {initialize finalize watch read x} initialize\" returned bad method \"x\": must be blocking, cget, cgetall, configure, finalize, initialize, read, seek, watch, or write} {TCL LOOKUP INDEX method x}}", got);
+}
+
+test "chan push and chan pop give the results of tclsh 8.6.16 (#690)" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    const linux = tcl.sys.os;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const rc = linux.openat(tmp.dir.handle, ".", .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
+    it.fs.fd = @intCast(rc);
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    // The script and the result come from tclsh 8.6.16.
+    const got = try it.str(try it.eval(
+        \\proc e {s} {set r [catch {uplevel 1 $s} m o]; set ec [expr {[dict exists $o -errorcode] ? [dict get $o -errorcode] : "-"}]; return [list $r $m $ec]}
+        \\proc up {cmd h args} {
+        \\    switch $cmd {
+        \\        initialize {return {initialize finalize read write drain flush clear}}
+        \\        read {return [string toupper [lindex $args 0]]}
+        \\        write {return [string tolower [lindex $args 0]]}
+        \\        drain {return "<D>"}
+        \\        flush {return "<F>"}
+        \\    }
+        \\}
+        \\set f [open x.txt w]
+        \\set r [list [string match file* [chan push $f up]]]
+        \\puts -nonewline $f HeLLo
+        \\flush $f
+        \\puts -nonewline $f AB
+        \\chan pop $f
+        \\puts -nonewline $f Zz
+        \\close $f
+        \\set fd [open x.txt rb]; lappend r [read $fd]; close $fd
+        \\set f [open x.txt r]
+        \\chan push $f up
+        \\lappend r [read $f]
+        \\seek $f 0
+        \\lappend r [read $f 3]
+        \\close $f
+        \\proc t {cmd h args} {lappend ::h $cmd $h; if {$cmd eq "initialize"} {return {initialize finalize read write}}; return [lindex $args 0]}
+        \\set f [open x.txt r+]
+        \\chan push $f t
+        \\chan push $f t
+        \\puts -nonewline $f q; flush $f
+        \\chan pop $f
+        \\chan pop $f
+        \\close $f
+        \\lappend r $::h
+        \\set s [open x.txt r]
+        \\proc b1 {cmd h args} {if {$cmd eq "initialize"} {return {initialize finalize watch}}}
+        \\lappend r [e {chan push $s b1}]
+        \\proc b2 {cmd h args} {if {$cmd eq "initialize"} {return {initialize finalize}}}
+        \\lappend r [e {chan push $s b2}]
+        \\proc b3 {cmd h args} {if {$cmd eq "initialize"} {return {initialize finalize read}}}
+        \\set f [open x.txt w]
+        \\lappend r [e {chan push $f b3}]
+        \\close $f
+        \\lappend r [e {chan pop $s}] [e {chan push}] [e {chan pop}] [e {chan push nochan up}]
+        \\close $s
+        \\set r
+    ));
+    try std.testing.expectEqualStrings("1 helloab<F>Zz HELLOAB<F>ZZ<D> HEL {initialize rt2 initialize rt3 write rt3 write rt2 finalize rt3 finalize rt2} {1 {chan handler \"b1 initialize\" returned bad method \"watch\": must be clear, drain, finalize, flush, initialize, limit?, read, or write} {TCL LOOKUP INDEX method watch}} {1 {chan handler \"b2\" makes the channel inaccessible} NONE} {1 {chan handler \"b3\" makes the channel inaccessible} NONE} {0 {} -} {1 {wrong # args: should be \"chan push channel cmdprefix\"} {TCL WRONGARGS}} {1 {wrong # args: should be \"chan pop channel\"} {TCL WRONGARGS}} {1 {can not find channel named \"nochan\"} {TCL LOOKUP CHANNEL nochan}}", got);
 }
