@@ -183,7 +183,7 @@ command ztcl::wasm {
     subcommand call {
         synopsis {ztcl::wasm call INSTANCE FUNCTION ?-limit UNITS? ?-raw? ?--? ?ARG ...?}
         summary {Calls an exported function and gives its result.}
-        description {Calls the export FUNCTION of INSTANCE with the ARG values, one for each parameter. It gives the result, a list for more than one result, or an empty string for none. The options come after FUNCTION, and the first word that is not an option is the first ARG, also an unknown word such as `-bogus` ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).}
+        description {Calls the export FUNCTION of INSTANCE with the ARG values, one for each parameter. It gives the result, a list for more than one result, or an empty string for none. The options come after FUNCTION, and the first word that is not an option is the first ARG. A word of a dash and a letter that is no number, such as `-bogus`, is an unknown option and an error. A negative number, `-inf`, and `-nan` are arguments.}
         returns {The result, a list of the results, or an empty string.}
         see {{ztcl::wasm exports} {ztcl::wasm instantiate}}
         argument INSTANCE {
@@ -216,6 +216,7 @@ command ztcl::wasm {
             ztcl::wasm call $dw div 7 0
         } {wasm trap: integer divide by zero} {ZTCL WASM TRAP {integer divide by zero}}
         error {ztcl::wasm call $w add 1} {the function "add" has 2 parameters and got 1 arguments} {ZTCL WASM ARGS}
+        error {ztcl::wasm call $w add -bogus 1 2} {bad option "-bogus": must be -limit, -raw, or --} {TCL LOOKUP INDEX option}
         error {ztcl::wasm call $w add 4294967296 1} {expected i32 but got "4294967296"} {ZTCL WASM VALUE}
         error {ztcl::wasm call $w add x 1} {expected integer but got "x"} NONE
         error {ztcl::wasm call $w nope} {the instance has no export "nope"} {ZTCL WASM EXPORT}
@@ -291,7 +292,7 @@ command ztcl::wasm {
             value DICT
             type dict
             summary {Gives the package the folders and the other values of WASI.}
-            description {The keys of the `-wasi` option of `instantiate`. With no `-wasi`, the package gets the imports of WASI with no folder. The options are checked before the file is read. A `-wasi` with no value gives a wrong message ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).}
+            description {The keys of the `-wasi` option of `instantiate`. With no `-wasi`, the package gets the imports of WASI with no folder. The options are checked before the file is read. A `-wasi` with no value is a wrong count of arguments.}
             example {
                 set f [open add.wasm wb]
                 puts -nonewline $f [binary decode hex 0061736d0100000001070160027f7f017f030201000707010361646400000a09010700200020016a0b]
@@ -300,7 +301,7 @@ command ztcl::wasm {
                 set msg
             } {the module "add.wasm" has no export "ztcl_cext_reply" of a C package}
             error {ztcl::wasm package x.wasm Add -wasi {bogus 1}} {bad WASI option "bogus": must be args, dirs, env, or stdin} {TCL LOOKUP INDEX option}
-            error {ztcl::wasm package x.wasm Add -wasi} {bad option "-wasi": must be -wasi} {TCL LOOKUP INDEX option}
+            error {ztcl::wasm package x.wasm Add -wasi} {wrong # args: should be "ztcl::wasm package fileName ?prefix? ?-wasi dict?"} {TCL WRONGARGS}
             error {ztcl::wasm package x.wasm Add -bogus 1} {bad option "-bogus": must be -wasi} {TCL LOOKUP INDEX option}
         }
     }
@@ -427,7 +428,7 @@ command ztcl::wasm {
         synopsis {ztcl::wasm memory INSTANCE string ADDRESS ?LENGTH?}
         summary {Reads, writes, and grows the linear memory of an instance.}
         description {
-            Works on the memory that INSTANCE exports as `memory`, or on its first memory. A page is 65,536 bytes, and a range outside the memory is an error with the code `ZTCL WASM MEMORY`. The memory is looked up before the name of the subcommand, so an instance with no memory gives `the instance has no memory` for each word ([issue 714](https://github.com/beetlebugorg/ztcl/issues/714)).
+            Works on the memory that INSTANCE exports as `memory`, or on its first memory. A page is 65,536 bytes, and a range outside the memory is an error with the code `ZTCL WASM MEMORY`. The name of the subcommand is checked before the memory is looked up, so an unknown subcommand is the same error for an instance with no memory.
 
             - `size` gives the size in pages.
             - `grow` grows the memory by PAGES pages and gives the old size, or -1 past the maximum of the memory or at the memory limit.
@@ -463,6 +464,11 @@ command ztcl::wasm {
             ztcl::wasm memory $mw write 65535 ab
         } {the range 65535 to 65537 is outside the memory of 65536 bytes} {ZTCL WASM MEMORY}
         error {ztcl::wasm memory $w size} {the instance has no memory} {ZTCL WASM MEMORY}
+        error {ztcl::wasm memory $w bogus} {unknown subcommand "bogus": must be grow, read, size, string, or write} {TCL LOOKUP INDEX subcommand}
+        error {
+            set mw [ztcl::wasm instantiate $mem]
+            ztcl::wasm memory $mw read -1 4
+        } {the range -1 to 3 is outside the memory of 65536 bytes} {ZTCL WASM MEMORY}
         error {ztcl::wasm memory $mem size} {can not find wasm instance "wasmmod1"} {ZTCL WASM HANDLE}
         error {
             set mw [ztcl::wasm instantiate $mem]
