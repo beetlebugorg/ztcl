@@ -27,7 +27,7 @@ command lsort {
     error {lsort} {wrong # args: should be "lsort ?-option value ...? list"} {TCL WRONGARGS}
     error {lsort -bogus {a}} {bad option "-bogus": must be -ascii, -command, -decreasing, -dictionary, -increasing, -index, -indices, -integer, -nocase, -real, -stride, or -unique} NONE
     error "lsort \"a \{b\"" {unmatched open brace in list} {TCL VALUE LIST BRACE}
-    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL OPERATION LSORT INDEXFAILED` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL OPERATION LSORT INDEXFAILED` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
 
     option -ascii {
         type flag
@@ -52,7 +52,7 @@ command lsort {
         description {Each element must be an integer, in any form of Tcl, such as `0x10`. Equal integers in a different form, such as `1` and `01`, compare as equal.}
         example {lsort -integer {10 9 100}} {9 10 100}
         example {lsort -integer {0x10 9}} {9 0x10}
-        error {lsort -integer {10 x}} {expected integer but got "x"} NONE
+        error {lsort -integer {10 x}} {expected integer but got "x"} {TCL VALUE NUMBER}
     }
     option -real {
         type flag

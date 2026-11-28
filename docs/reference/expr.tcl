@@ -23,7 +23,7 @@ command expr {
     release {Tcl 9.1 has the string comparison operators `lt`, `le`, `gt`, and `ge`, the prefix `0d` of decimal integers, and `_` between the digits of a number, such as `1_000`.}
     difference {An operation with no numeric result, such as `0.0 / 0`, gives `NaN`, where Tcl 8.6.16 and 9.0.4 raise a domain error ([issue 679](https://github.com/beetlebugorg/ztcl/issues/679)).}
     difference {In Tcl 9.0.4 the message of an operand of the wrong type names the operand and its side, such as `cannot use non-numeric string "ten" as left operand of "+"`. ztcl gives the message of Tcl 8.6 in both releases ([issue 680](https://github.com/beetlebugorg/ztcl/issues/680)).}
-    difference {A variable with no value has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL LOOKUP VARNAME` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {A variable with no value has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     argument ARG {
         type expression
         repeats

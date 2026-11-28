@@ -16,7 +16,7 @@ command dict {
         The first argument names the subcommand, and a unique prefix of its name is enough.
     }
     returns {The result of the subcommand.}
-    difference {Many errors have `-errorcode NONE` in ztcl, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP DICT` or `TCL VALUE DICTIONARY` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {A variable with no value has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     see {array list lsort {string map}}
     release {Tcl 9.1 adds `dict getdef` and its other name `dict getwithdefault`.}
     example {set d [dict create text milk done 0]} {text milk done 0}
@@ -25,9 +25,9 @@ command dict {
     example {dict exists $d tags} 0
     example {dict merge {a 1 b 2} {b 3}} {a 1 b 3}
     example {dict filter {a 1 b 2 c 3} value {[13]}} {a 1 c 3}
-    error {dict get {a 1} b} {key "b" not known in dictionary} NONE
-    error {dict nope} {unknown or ambiguous subcommand "nope": must be append, create, exists, filter, for, get, getdef, getwithdefault, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with} NONE -tcl 9.1
-    error {dict nope} {unknown or ambiguous subcommand "nope": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with} NONE -tcl 8.6
+    error {dict get {a 1} b} {key "b" not known in dictionary} {TCL LOOKUP DICT b}
+    error {dict nope} {unknown or ambiguous subcommand "nope": must be append, create, exists, filter, for, get, getdef, getwithdefault, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with} {TCL LOOKUP SUBCOMMAND nope} -tcl 9.1
+    error {dict nope} {unknown or ambiguous subcommand "nope": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with} {TCL LOOKUP SUBCOMMAND nope} -tcl 8.6
     error {dict size "a \{"} {unmatched open brace in dict} {TCL VALUE DICTIONARY BRACE} -note {A value that is not a valid list.}
 
     subcommand create {
@@ -80,8 +80,8 @@ command dict {
         example {dict get {a 1 b 2} b} 2
         example {dict get {a {x 9}} a x} 9
         example {dict get {a 1 b 2}} {a 1 b 2}
-        error {dict get {a 1} b} {key "b" not known in dictionary} NONE
-        error {dict get {a 1} a x} {missing value to go with key} NONE -note {The value 1 of the key a is not a dict.}
+        error {dict get {a 1} b} {key "b" not known in dictionary} {TCL LOOKUP DICT b}
+        error {dict get {a 1} a x} {missing value to go with key} {TCL VALUE DICTIONARY} -note {The value 1 of the key a is not a dict.}
         error {dict get} {wrong # args: should be "dict get dictionary ?key ...?"} {TCL WRONGARGS}
     }
 
@@ -113,8 +113,8 @@ command dict {
         example {dict getdef {a 1} a 9} 1
         example {dict getdef {a {b 2}} a c 0} 0
         example {dict getdef {} a b 1} 1
-        error {dict getdef {a 1} a x 0} {missing value to go with key} NONE
-        error {dict getdef {a 1} b} {wrong # args: should be "dict getdef dictionary ?key ...? key default"} NONE
+        error {dict getdef {a 1} a x 0} {missing value to go with key} {TCL VALUE DICTIONARY}
+        error {dict getdef {a 1} b} {wrong # args: should be "dict getdef dictionary ?key ...? key default"} {TCL WRONGARGS}
     }
 
     subcommand getwithdefault {
@@ -138,7 +138,7 @@ command dict {
             summary {The result when a key is missing.}
         }
         example {dict getwithdefault {a 1} b 9} 9
-        error {dict getwithdefault {a 1}} {wrong # args: should be "dict getwithdefault dictionary ?key ...? key default"} NONE
+        error {dict getwithdefault {a 1}} {wrong # args: should be "dict getwithdefault dictionary ?key ...? key default"} {TCL WRONGARGS}
     }
 
     subcommand exists {
@@ -203,7 +203,7 @@ command dict {
         error {
             set d {a 1}
             dict set d a x y
-        } {missing value to go with key} NONE -note {The value 1 of the key a is not a dict.}
+        } {missing value to go with key} {TCL VALUE DICTIONARY} -note {The value 1 of the key a is not a dict.}
         error {dict set d a} {wrong # args: should be "dict set dictVarName key ?key ...? value"} {TCL WRONGARGS}
     }
 
@@ -241,7 +241,7 @@ command dict {
         error {
             set d {a 1}
             dict unset d q r
-        } {key "q" not known in dictionary} NONE
+        } {key "q" not known in dictionary} {TCL LOOKUP DICT q}
         error {dict unset d} {wrong # args: should be "dict unset dictVarName key ?key ...?"} {TCL WRONGARGS}
     }
 
@@ -265,7 +265,7 @@ command dict {
         example {dict keys {a 1 b 2 ab 3}} {a b ab}
         example {dict keys {a 1 b 2 ab 3} a*} {a ab}
         example {dict keys {}} {}
-        error {dict keys {a 1 b}} {missing value to go with key} NONE
+        error {dict keys {a 1 b}} {missing value to go with key} {TCL VALUE DICTIONARY}
     }
 
     subcommand values {
@@ -287,7 +287,7 @@ command dict {
         }
         example {dict values {a 1 b 2 c 12}} {1 2 12}
         example {dict values {a 1 b 2 c 12} 1*} {1 12}
-        error {dict values x} {missing value to go with key} NONE
+        error {dict values x} {missing value to go with key} {TCL VALUE DICTIONARY}
     }
 
     subcommand size {
@@ -305,7 +305,7 @@ command dict {
         example {dict size {a 1 b 2}} 2
         example {dict size {a 1 a 2}} 1
         example {dict size {}} 0
-        error {dict size {a}} {missing value to go with key} NONE
+        error {dict size {a}} {missing value to go with key} {TCL VALUE DICTIONARY}
         error {dict size} {wrong # args: should be "dict size dictionary"} {TCL WRONGARGS}
     }
 
@@ -334,7 +334,7 @@ command dict {
         example {dict for {k v} {a 1 b 2} {puts "$k=$v"}} {} -output "a=1\nb=2\n"
         example {dict for {k v} {a 1 b 2 c 3} {if {$k eq "b"} continue; puts $k}} {} -output "a\nc\n"
         example {dict for {k v} {a 1 b 2} {if {$k eq "b"} break; puts $k}} {} -output "a\n"
-        error {dict for {k} {a 1} {}} {must have exactly two variable names} NONE
+        error {dict for {k} {a 1} {}} {must have exactly two variable names} {TCL SYNTAX dict for}
         error {dict for {k v} {a 1} {error boom}} boom NONE
     }
 
@@ -365,7 +365,7 @@ command dict {
         example {dict map {k v} {a 1 b 2 c 3} {if {$k eq "b"} break; set v}} {}
         example {dict map {k v} {a 1} {set k z; set v}} {z 1}
         example {dict map {k v} {a 1 b 2} {set k z; set v}} {z 2} -note {Both keys become `z`, and the last value stays.}
-        error {dict map {k} {a 1} {}} {must have exactly two variable names} NONE
+        error {dict map {k} {a 1} {}} {must have exactly two variable names} {TCL SYNTAX dict map}
         error {dict map {k v} {a 1} {error inner}} inner NONE
     }
 
@@ -411,8 +411,8 @@ command dict {
         example {dict filter {a 1 b 2 c 3} value {[13]}} {a 1 c 3}
         example {dict filter {a 1 b 2 c 3} script {k v} {expr {$v > 1}}} {b 2 c 3}
         example {dict filter {a 1 b 2 c 3} script {k v} {if {$v == 2} break; expr 1}} {a 1}
-        error {dict filter {a 1} bogus x} {bad filterType "bogus": must be key, script, or value} NONE
-        error {dict filter {a 1} script {k v} {expr {"x"}}} {expected boolean value but got "x"} NONE
+        error {dict filter {a 1} bogus x} {bad filterType "bogus": must be key, script, or value} {TCL LOOKUP INDEX filterType bogus}
+        error {dict filter {a 1} script {k v} {expr {"x"}}} {expected boolean value but got "x"} {TCL VALUE NUMBER}
     }
 
     subcommand merge {
@@ -432,7 +432,7 @@ command dict {
         example {dict merge {a 1 b 2} {b 3 c 4}} {a 1 b 3 c 4}
         example {dict merge {a {x 1}} {a {y 2}}} {a {y 2}}
         example {dict merge} {}
-        error {dict merge {a 1} {b}} {missing value to go with key} NONE
+        error {dict merge {a 1} {b}} {missing value to go with key} {TCL VALUE DICTIONARY}
     }
 
     subcommand remove {
@@ -455,7 +455,7 @@ command dict {
         }
         example {dict remove {a 1 b 2 c 3} a c} {b 2}
         example {dict remove {a 1} zz} {a 1}
-        error {dict remove {a}} {missing value to go with key} NONE
+        error {dict remove {a}} {missing value to go with key} {TCL VALUE DICTIONARY}
     }
 
     subcommand replace {
@@ -534,11 +534,11 @@ command dict {
         error {
             set d {n x}
             dict incr d n
-        } {expected integer but got "x"} NONE
+        } {expected integer but got "x"} {TCL VALUE NUMBER}
         error {
             set d {n 1}
             dict incr d n 1.5
-        } {expected integer but got "1.5"} NONE
+        } {expected integer but got "1.5"} {TCL VALUE INTEGER}
     }
 
     subcommand append {
@@ -709,7 +709,7 @@ command dict {
         error {
             set d {p {x 1}}
             dict with d q {set y 2}
-        } {key "q" not known in dictionary} NONE
+        } {key "q" not known in dictionary} {TCL LOOKUP DICT q}
         error {
             unset -nocomplain nod
             dict with nod {}
@@ -730,6 +730,6 @@ command dict {
         }
         example {dict info {a 1 b 2}} {2 entries in table}
         example {dict info {}} {0 entries in table}
-        error {dict info {a}} {missing value to go with key} NONE
+        error {dict info {a}} {missing value to go with key} {TCL VALUE DICTIONARY}
     }
 }

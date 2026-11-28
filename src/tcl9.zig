@@ -39,7 +39,8 @@ pub fn Only(comptime Sub: type) type {
         v9_1: []const Sub = &.{},
         /// The start of the error message, before the quoted word.
         head: []const u8 = "unknown or ambiguous subcommand",
-        /// The `errorCode` of the error. Null gives NONE.
+        /// The `errorCode` of the error, before the word as its last
+        /// element. Null gives NONE.
         code: ?[]const u8 = null,
     };
 }
@@ -92,9 +93,8 @@ fn pickName(it: *Interp, names: []const [:0]const u8, absent: u64, text: []const
         if (i > 0) try msg.appendSlice(a, if (i + 1 == list.items.len) (if (list.items.len > 2) ", or " else " or ") else ", ");
         try msg.appendSlice(a, n);
     }
-    it.result = .{ .str = msg.items };
-    it.error_code = .{ .str = code orelse "NONE" };
-    return error.TclError;
+    const c = code orelse return it.failCode("NONE", "{s}", .{msg.items});
+    return it.failWord(c, text, "{s}", .{msg.items});
 }
 
 /// The commands of Tcl 9.1 that Tcl 8.6 does not have.

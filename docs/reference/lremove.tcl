@@ -12,7 +12,6 @@ command lremove {
     }
     returns {The new list.}
     see {lreplace lpop lsearch}
-    difference {A bad index has `-errorcode NONE`, where Tcl 9.0.4 gives `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     argument LIST {
         type list
         summary {The list.}
@@ -28,6 +27,6 @@ command lremove {
     example {lremove {a b c d} 1 1} {a c d}
     example {lremove {a b c d} 5} {a b c d}
     example {lremove {a b c d}} {a b c d}
-    error {lremove {a b} x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    error {lremove {a b} x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error {lremove} {wrong # args: should be "lremove list ?index ...?"} {TCL WRONGARGS}
 }

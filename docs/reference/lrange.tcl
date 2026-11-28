@@ -30,7 +30,6 @@ command lrange {
     example {lrange {a b c d} 2 99} {c d}
     example {lrange {a b c d} 2 1} {}
     example {lrange {a {b c} d} 1 1} {{b c}}
-    error {lrange {a b} x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    error {lrange {a b} x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error {lrange {a b} 0} {wrong # args: should be "lrange list first last"} {TCL WRONGARGS}
-    difference {A bad index has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
 }

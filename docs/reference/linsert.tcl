@@ -32,7 +32,6 @@ command linsert {
     example {linsert {a b} end+5 x} {a b x}
     example {linsert {a b} -3 x} {x a b}
     example {linsert {a b} 1} {a b}
-    error {linsert {a b} x y} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    error {linsert {a b} x y} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error {linsert {a b}} {wrong # args: should be "linsert list index ?element ...?"} {TCL WRONGARGS}
-    difference {A bad index has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
 }

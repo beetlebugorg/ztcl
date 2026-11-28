@@ -75,7 +75,7 @@ command ztcl::meter {
                 ztcl::meter create a -budget {}
                 dict get [ztcl::meter get a] budget
             } {}
-            error {ztcl::meter create d -budget x} {expected integer but got "x"} NONE
+            error {ztcl::meter create d -budget x} {expected integer but got "x"} {TCL VALUE NUMBER}
             error {ztcl::meter create d -budget -5} {bad budget "-5": must be 0 or more} NONE
             error {ztcl::meter create d -budget} {wrong # args: should be "ztcl::meter create name ?-budget units? ?-tenant text?"} {TCL WRONGARGS}
         }

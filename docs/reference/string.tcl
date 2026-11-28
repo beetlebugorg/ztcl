@@ -18,7 +18,6 @@ command string {
         The option `-grapheme` of `length`, `index`, `range`, and `reverse` counts grapheme clusters in place of characters. A grapheme cluster is what a reader sees as one character, such as `e` with a combining accent, or a flag of two regional indicators. It needs the module ztcl::text in the build, with no `package require`.
     }
     returns {The result of the subcommand.}
-    difference {Many errors have `-errorcode NONE` in ztcl, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL VALUE INDEX` or `TCL LOOKUP SUBCOMMAND`, and an error of a bad option has the code with no bad word at its end ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     see {append format scan split join regexp regsub tcl::prefix encoding}
     release {Tcl 9.1 adds `string insert` and the class `dict` of `string is`, and has no `string bytelength`.}
     release {In Tcl 9.1 an integer of `string is integer` can have `_` between its digits, such as `1_000`.}
@@ -30,9 +29,9 @@ command string {
     example {string is integer -strict ""} 0
     example {string first k "buy milk"} 7
     example {string len abc} 3 -note {A unique prefix of a subcommand is the subcommand.}
-    error {string nope x} {unknown or ambiguous subcommand "nope": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} NONE -tcl 9.1
-    error {string nope x} {unknown or ambiguous subcommand "nope": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} NONE -tcl 8.6
-    error {string t abc} {unknown or ambiguous subcommand "t": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} NONE -tcl 9.1 -note {The prefix t matches more than one subcommand.}
+    error {string nope x} {unknown or ambiguous subcommand "nope": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} {TCL LOOKUP SUBCOMMAND nope} -tcl 9.1
+    error {string nope x} {unknown or ambiguous subcommand "nope": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} {TCL LOOKUP SUBCOMMAND nope} -tcl 8.6
+    error {string t abc} {unknown or ambiguous subcommand "t": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart} {TCL LOOKUP SUBCOMMAND t} -tcl 9.1 -note {The prefix t matches more than one subcommand.}
 
     subcommand length {
         synopsis {string length STRING}
@@ -117,7 +116,7 @@ command string {
         example {string insert abc end X} abcX
         example {string insert abc -5 X} Xabc
         example {string insert abc 10 X} abcX
-        error {string insert abc x X} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string insert abc x X} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
         error {string insert abc 1} {wrong # args: should be "string insert string index insertString"} {TCL WRONGARGS}
     }
 
@@ -145,7 +144,7 @@ command string {
         example {string index abc 1+1} c
         example {string index abc 5} {}
         example {string index abc -1} {}
-        error {string index abc foo} {bad index "foo": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string index abc foo} {bad index "foo": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
         error {string index abc} {wrong # args: should be "string index string charIndex"} {TCL WRONGARGS}
         option -grapheme {
             type flag
@@ -157,7 +156,7 @@ command string {
             }
             example {string index -grapheme "aéb" 1} "e\u0301"
             example {string index -grapheme "aéb" end} b
-            error {string index -grapheme abc} {bad index "abc": must be integer?[+-]integer? or end?[+-]integer?} NONE -note {With two arguments, -grapheme is the string and abc is the index.}
+            error {string index -grapheme abc} {bad index "abc": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX} -note {With two arguments, -grapheme is the string and abc is the index.}
         }
     }
 
@@ -189,7 +188,7 @@ command string {
         example {string range abcdef -5 2} abc
         example {string range abcdef 3 1} {}
         error {string range abc 1} {wrong # args: should be "string range string first last"} {TCL WRONGARGS}
-        error {string range abc x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string range abc x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
         option -grapheme {
             type flag
             summary {Counts FIRST and LAST in grapheme clusters.}
@@ -198,7 +197,7 @@ command string {
             }
             example {string range -grapheme "aéio" 1 2} "e\u0301i"
             example {string range "aéio" 1 2} "e\u0301" -note {With no option, the range is two code points: e and the accent.}
-            error {string range -grapheme abc 0 x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+            error {string range -grapheme abc 0 x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
         }
     }
 
@@ -232,7 +231,7 @@ command string {
         example {string first k "buy milk" 8} -1
         example {string first "" abc} -1
         error {string first a} {wrong # args: should be "string first needleString haystackString ?startIndex?"} {TCL WRONGARGS}
-        error {string first k kk x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string first k kk x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     }
 
     subcommand last {
@@ -266,7 +265,7 @@ command string {
         example {string last ab xxabab 100} 4
         error {string last a} {wrong # args: should be "string last needleString haystackString ?startIndex?"} {TCL WRONGARGS} -tcl 8.6
         error {string last a} {wrong # args: should be "string last needleString haystackString ?lastIndex?"} {TCL WRONGARGS} -tcl 9.1
-        error {string last a abc x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string last a abc x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     }
 
     subcommand compare {
@@ -302,7 +301,7 @@ command string {
             example {string compare B a} -1 -note {B (U+0042) is before a (U+0061).}
             example {string compare -nocase B a} 1
             example {string compare -n A a} 0 -note {A unique prefix of an option is the option.}
-            error {string compare -bogus a b} {bad option "-bogus": must be -nocase or -length} {TCL LOOKUP INDEX option}
+            error {string compare -bogus a b} {bad option "-bogus": must be -nocase or -length} {TCL LOOKUP INDEX option -bogus}
         }
         option -length {
             value N
@@ -314,7 +313,7 @@ command string {
             example {string compare -length 2 abc abd} 0
             example {string compare -length -1 abc abd} -1
             example {string compare -nocase -length 2 ABx abY} 0
-            error {string compare -length x abc abd} {expected integer but got "x"} NONE
+            error {string compare -length x abc abd} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
     }
 
@@ -348,7 +347,7 @@ command string {
             }
             example {string equal -nocase ABC abc} 1
             example {string equal -nocase "É" "é"} 1
-            error {string equal -nocase a b c} {bad option "a": must be -nocase or -length} {TCL LOOKUP INDEX option}
+            error {string equal -nocase a b c} {bad option "a": must be -nocase or -length} {TCL LOOKUP INDEX option a}
         }
         option -length {
             value N
@@ -360,7 +359,7 @@ command string {
             example {string equal -length 2 abc abd} 1
             example {string equal -length 0 a b} 1
             example {string equal -length -1 abc abd} 0
-            error {string equal -length x a b} {expected integer but got "x"} NONE
+            error {string equal -length x a b} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
     }
 
@@ -402,7 +401,7 @@ command string {
             example {string match -nocase A* abc} 1
             example {string match -nocase {[A-C]} b} 1
             example {string match -nocase a} 0 -note {With two arguments, -nocase is the pattern and a is the string.}
-            error {string match -bogus a a} {bad option "-bogus": must be -nocase} {TCL LOOKUP INDEX option}
+            error {string match -bogus a a} {bad option "-bogus": must be -nocase} {TCL LOOKUP INDEX option -bogus}
         }
     }
 
@@ -429,9 +428,9 @@ command string {
         example {string map {ab X a Y} aab} YX
         example {string map {a b b a} ab} ba
         example {string map {a {}} banana} bnn
-        error {string map {a} abc} {char map list unbalanced} NONE
+        error {string map {a} abc} {char map list unbalanced} {TCL OPERATION MAP UNBALANCED}
         error {string map a} {wrong # args: should be "string map ?-nocase? charMap string"} {TCL WRONGARGS}
-        error {string map {a 1} abc extra} {bad option "a 1": must be -nocase} {TCL LOOKUP INDEX option} -note {With three arguments, the first one is an option.}
+        error {string map {a 1} abc extra} {bad option "a 1": must be -nocase} {TCL LOOKUP INDEX option {a 1}} -note {With three arguments, the first one is an option.}
         option -nocase {
             type flag
             summary {Matches the keys with no regard to the case of letters.}
@@ -441,7 +440,7 @@ command string {
             example {string map -nocase {ab X} "AB aB"} {X X}
             example {string map -nocase {é E} "É"} E
             example {string map -nocase {Σ x} "σς"} xς -note {The lowercase of `Σ` is `σ`. The final form `ς` is another letter.}
-            error {string map -nocase {a} abc} {char map list unbalanced} NONE
+            error {string map -nocase {a} abc} {char map list unbalanced} {TCL OPERATION MAP UNBALANCED}
         }
     }
 
@@ -464,7 +463,7 @@ command string {
         example {string repeat ab 3} ababab
         example {string repeat ab 0} {}
         example {string repeat ab -1} {}
-        error {string repeat ab x} {expected integer but got "x"} NONE
+        error {string repeat ab x} {expected integer but got "x"} {TCL VALUE NUMBER}
         error {string repeat a} {wrong # args: should be "string repeat string count"} {TCL WRONGARGS}
     }
 
@@ -502,7 +501,7 @@ command string {
         example {string replace abcdef 4 10 X} abcdX
         example {string replace abcdef 3 1 X} abcdef
         error {string replace a} {wrong # args: should be "string replace string first last ?string?"} {TCL WRONGARGS}
-        error {string replace abc x 1 Z} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string replace abc x 1 Z} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     }
 
     subcommand reverse {
@@ -567,8 +566,8 @@ command string {
         example {string tolower ABC 1} AbC
         example {string tolower ABCDEF 1 3} AbcdEF
         example {string tolower "ÀÉÎ"} {àéî}
-        error {string tolower} {wrong # args: should be "string tolower string ?first? ?last?"} NONE
-        error {string tolower ABC 1 x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string tolower} {wrong # args: should be "string tolower string ?first? ?last?"} {TCL WRONGARGS}
+        error {string tolower ABC 1 x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     }
 
     subcommand toupper {
@@ -599,7 +598,7 @@ command string {
         example {string toupper abc 0 0} Abc
         example {string toupper straße} {STRAßE}
         example {string toupper abc 2 1} abc
-        error {string toupper} {wrong # args: should be "string toupper string ?first? ?last?"} NONE
+        error {string toupper} {wrong # args: should be "string toupper string ?first? ?last?"} {TCL WRONGARGS}
     }
 
     subcommand totitle {
@@ -631,8 +630,8 @@ command string {
         example {string totitle "hELLO wORLD"} {Hello world}
         example {string totitle "hello world" 6 end} {hello World}
         example {string totitle ǆemal} {ǅemal}
-        error {string totitle abc x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
-        error {string totitle} {wrong # args: should be "string totitle string ?first? ?last?"} NONE
+        error {string totitle abc x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
+        error {string totitle} {wrong # args: should be "string totitle string ?first? ?last?"} {TCL WRONGARGS}
     }
 
     subcommand trim {
@@ -659,7 +658,7 @@ command string {
         example {string trim abcXcba abc} X
         example {string trim " x "} x
         example {string trim abc ""} abc
-        error {string trim abc x y} {wrong # args: should be "string trim string ?chars?"} NONE
+        error {string trim abc x y} {wrong # args: should be "string trim string ?chars?"} {TCL WRONGARGS}
     }
 
     subcommand trimleft {
@@ -682,7 +681,7 @@ command string {
         }
         example {string trimleft "  a  "} {a  }
         example {string trimleft 0012 0} 12
-        error {string trimleft} {wrong # args: should be "string trimleft string ?chars?"} NONE
+        error {string trimleft} {wrong # args: should be "string trimleft string ?chars?"} {TCL WRONGARGS}
     }
 
     subcommand trimright {
@@ -705,7 +704,7 @@ command string {
         }
         example {string trimright "  a  "} {  a}
         example {string trimright 1.500 0} 1.5
-        error {string trimright} {wrong # args: should be "string trimright string ?chars?"} NONE
+        error {string trimright} {wrong # args: should be "string trimright string ?chars?"} {TCL WRONGARGS}
     }
 
     subcommand is {
@@ -758,8 +757,8 @@ command string {
         example {string is dict {a 1}} 1 -tcl 9.1
         example {string is integer 1_000} 1 -tcl 9.1
         example {string is integer 1_000} 0 -tcl 8.6
-        error {string is bogus x} {bad class "bogus": must be alnum, alpha, ascii, control, boolean, dict, digit, double, entier, false, graph, integer, list, lower, print, punct, space, true, upper, wideinteger, wordchar, or xdigit} {TCL LOOKUP INDEX class} -tcl 9.1
-        error {string is dict {a 1}} {bad class "dict": must be alnum, alpha, ascii, control, boolean, digit, double, entier, false, graph, integer, list, lower, print, punct, space, true, upper, wideinteger, wordchar, or xdigit} {TCL LOOKUP INDEX class} -tcl 8.6
+        error {string is bogus x} {bad class "bogus": must be alnum, alpha, ascii, control, boolean, dict, digit, double, entier, false, graph, integer, list, lower, print, punct, space, true, upper, wideinteger, wordchar, or xdigit} {TCL LOOKUP INDEX class bogus} -tcl 9.1
+        error {string is dict {a 1}} {bad class "dict": must be alnum, alpha, ascii, control, boolean, digit, double, entier, false, graph, integer, list, lower, print, punct, space, true, upper, wideinteger, wordchar, or xdigit} {TCL LOOKUP INDEX class dict} -tcl 8.6
         error {string is integer} {wrong # args: should be "string is class ?-strict? ?-failindex var? str"} {TCL WRONGARGS}
         option -strict {
             type flag
@@ -770,7 +769,7 @@ command string {
             example {string is integer ""} 1
             example {string is integer -strict ""} 0
             example {string is alpha -strict abc} 1
-            error {string is integer -strict -bogus ""} {bad option "-bogus": must be -strict or -failindex} {TCL LOOKUP INDEX option}
+            error {string is integer -strict -bogus ""} {bad option "-bogus": must be -strict or -failindex} {TCL LOOKUP INDEX option -bogus}
         }
         option -failindex {
             value VAR
@@ -792,7 +791,7 @@ command string {
                 string is integer -failindex k 12
                 info exists k
             } 0
-            error {string is integer -failindex i} {wrong # args: should be "string is integer ?-strict? ?-failindex var? str"} NONE
+            error {string is integer -failindex i} {wrong # args: should be "string is integer ?-strict? ?-failindex var? str"} {TCL WRONGARGS}
         }
     }
 
@@ -837,7 +836,7 @@ command string {
         example {string wordstart "hello world" 7} 6
         example {string wordstart foo_bar 5} 0
         example {string wordstart "hello world" 5} 5
-        error {string wordstart "hello world" x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {string wordstart "hello world" x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
         error {string wordstart a} {wrong # args: should be "string wordstart string index"} {TCL WRONGARGS}
     }
 

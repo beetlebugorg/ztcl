@@ -36,7 +36,7 @@ command lsearch {
     error {lsearch -bogus {a} a} {bad option "-bogus": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices} NONE -tcl 8.6
     error "lsearch \"a \{b\" a" {unmatched open brace in list} {TCL VALUE LIST BRACE}
     release {Tcl 9.1 has the option `-stride`.}
-    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL OPERATION LSEARCH BAD_OPTION_MIX` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     release {In Tcl 9.1 the message of a bad regular expression starts with `cannot compile`, and in Tcl 8.6 with `couldn't compile`.}
     release {With `-subindices -inline` and no `-all`, Tcl 8.6 gives the whole element and Tcl 9.1 gives the subelement. With `-all` both give the subelements.}
 
@@ -121,7 +121,7 @@ command lsearch {
         example {lsearch -start 2 {a b a b} a} 2
         example {lsearch -all -start 1 {a b a} a} 2
         example {lsearch -start end {a b a} a} 2
-        error {lsearch -start x {a} a} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+        error {lsearch -start x {a} a} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     }
     option -ascii {
         type flag

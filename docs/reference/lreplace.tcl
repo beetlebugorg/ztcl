@@ -36,7 +36,6 @@ command lreplace {
     example {lreplace {a b c d} 2 1 x} {a b x c d}
     example {lreplace {a b c d} 3 10 x} {a b c x}
     example {lreplace {a b} 5 6 x} {a b x}
-    error {lreplace {a b} x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    error {lreplace {a b} x 1} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error {lreplace {a b} 0} {wrong # args: should be "lreplace list first last ?element ...?"} {TCL WRONGARGS}
-    difference {A bad index has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
 }

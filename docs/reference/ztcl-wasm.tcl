@@ -217,7 +217,7 @@ command ztcl::wasm {
         } {wasm trap: integer divide by zero} {ZTCL WASM TRAP {integer divide by zero}}
         error {ztcl::wasm call $w add 1} {the function "add" has 2 parameters and got 1 arguments} {ZTCL WASM ARGS}
         error {ztcl::wasm call $w add 4294967296 1} {expected i32 but got "4294967296"} {ZTCL WASM VALUE}
-        error {ztcl::wasm call $w add x 1} {expected integer but got "x"} NONE
+        error {ztcl::wasm call $w add x 1} {expected integer but got "x"} {TCL VALUE NUMBER}
         error {ztcl::wasm call $w nope} {the instance has no export "nope"} {ZTCL WASM EXPORT}
         error {ztcl::wasm call $w -raw add 1 2} {the instance has no export "-raw"} {ZTCL WASM EXPORT}
         error {ztcl::wasm call $m add 1 2} {can not find wasm instance "wasmmod0"} {ZTCL WASM HANDLE}
@@ -236,7 +236,7 @@ command ztcl::wasm {
             example {ztcl::wasm call $w add -limit 5 1 2} 3
             error {ztcl::wasm call $w add -limit 0 1 2} {wasm trap: compute limit reached} {ZTCL WASM LIMIT}
             error {ztcl::wasm call $w add -limit -1 1 2} {the limit must be 0 or more} {ZTCL WASM LIMIT}
-            error {ztcl::wasm call $w add -limit x 1 2} {expected integer but got "x"} NONE
+            error {ztcl::wasm call $w add -limit x 1 2} {expected integer but got "x"} {TCL VALUE NUMBER}
             error {ztcl::wasm call $w add -limit} {missing value for option "-limit"} NONE
         }
         option -raw {
@@ -480,7 +480,7 @@ command ztcl::wasm {
         error {
             set mw [ztcl::wasm instantiate $mem]
             ztcl::wasm memory $mw read 0 x
-        } {expected integer but got "x"} NONE
+        } {expected integer but got "x"} {TCL VALUE NUMBER}
         option -text {
             type flag
             summary {Writes the UTF-8 bytes of a string.}
@@ -536,7 +536,7 @@ command ztcl::wasm {
         error {
             set gw [ztcl::wasm instantiate $mem]
             ztcl::wasm global $gw g x
-        } {expected integer but got "x"} NONE
+        } {expected integer but got "x"} {TCL VALUE NUMBER}
         error {ztcl::wasm global $w} {wrong # args: should be "ztcl::wasm global instance name ?value?"} {TCL WRONGARGS}
     }
 

@@ -32,7 +32,6 @@ command lindex {
     example {lindex {a b c} 5} {}
     example {lindex {a b c}} {a b c}
     example {lindex {a b} 0 0 0} a
-    error {lindex {a b c} x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    error {lindex {a b c} x} {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error "lindex \"a \{b\" 0" {unmatched open brace in list} {TCL VALUE LIST BRACE}
-    difference {A bad index has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
 }

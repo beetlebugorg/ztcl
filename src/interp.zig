@@ -2317,6 +2317,25 @@ pub const Interp = struct {
         return error.TclError;
     }
 
+    /// An error whose `errorCode` is `head` and then `word` as one more
+    /// list element, as in `TCL LOOKUP INDEX option -bogus`.
+    pub fn failWord(it: *Interp, head: []const u8, word: []const u8, comptime fmt: []const u8, args: anytype) Error {
+        const a = it.alloc();
+        var code: std.ArrayList(u8) = .empty;
+        try code.appendSlice(a, head);
+        try code.append(a, ' ');
+        try value.appendElement(a, &code, word, false);
+        return it.failCode(code.items, fmt, args);
+    }
+
+    /// The error of a value that is not an integer. Tcl gives the code
+    /// `TCL VALUE INTEGER` for a value that holds a double, and `TCL
+    /// VALUE NUMBER` for text, also the text of a double.
+    pub fn failInt(it: *Interp, v: Value) Error {
+        const code = if (v == .double) "TCL VALUE INTEGER" else "TCL VALUE NUMBER";
+        return it.failCode(code, "expected integer but got \"{s}\"", .{try it.str(v)});
+    }
+
     pub fn wrongArgs(it: *Interp, comptime usage: []const u8) Error {
         return it.failCode("TCL WRONGARGS", "wrong # args: should be \"" ++ usage ++ "\"", .{});
     }
@@ -2365,7 +2384,7 @@ pub const Interp = struct {
     }
 
     pub fn int(it: *Interp, v: Value) Error!i64 {
-        return v.asInt() orelse it.fail("expected integer but got \"{s}\"", .{try it.str(v)});
+        return v.asInt() orelse it.failInt(v);
     }
 
     // ---- Evaluation ----
