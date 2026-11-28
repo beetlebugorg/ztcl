@@ -20,12 +20,6 @@ does: Runs a program in a pseudo terminal, for `ztcl::vt` and for tests of termi
 cap: exec
 page: modules/pty.md
 
-== ztcl::watch
-syn: ztcl::watch subcommand ?arg ...?
-does: Runs a script when a file or a folder changes.
-cap: file
-page: modules/watch.md
-
 == ztcl::open
 syn: ztcl::open target
 does: Opens a URL or a file in the default app of the host.
