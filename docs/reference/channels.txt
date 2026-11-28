@@ -97,49 +97,6 @@ syn: source ?-encoding name? fileName
 does: Runs the script in a file, and gives the result of its last command. `-encoding` names the encoding of the file. The default is `utf-8`. A byte order mark at the start of the file is not part of the script, and the character ^Z ends the script.
 cap: channels
 
-== file
-syn: file subcommand ?arg ...?
-does: Commands for paths and files. The name commands (`join`, `split`, `dirname`, `tail`, `extension`, `rootname`) work on text. The others read the file system, inside the root folder of the interpreter.
-cap: file
-flags: --root . --allow channels,file
-sub: file join NAME ?NAME ...? | One path from parts.
-sub: file split NAME | The parts of a path.
-sub: file dirname NAME | The path without its last part.
-sub: file tail NAME | The last part.
-sub: file extension NAME | The extension with its dot, such as `.json`.
-sub: file rootname NAME | The path without its extension.
-sub: file normalize NAME | The full path with `.` and `..` removed.
-sub: file pathtype NAME | `absolute`, `relative`, or `volumerelative`.
-sub: file nativename NAME | The path with the separator of the platform.
-sub: file separator ?NAME? | The separator of paths.
-sub: file exists NAME | 1 when the file exists.
-sub: file isfile NAME | 1 for a file.
-sub: file isdirectory NAME | 1 for a folder.
-sub: file readable NAME | 1 when the file can be read.
-sub: file writable NAME | 1 when the file can be written.
-sub: file executable NAME | 1 when the file can run.
-sub: file owned NAME | 1 when the user owns the file.
-sub: file size NAME | The size in bytes.
-sub: file mtime NAME ?TIME? | The time of the last change, in seconds.
-sub: file atime NAME ?TIME? | The time of the last read, in seconds.
-sub: file stat NAME VAR | Puts the facts of the file in an array.
-sub: file lstat NAME VAR | As `stat`, for a link itself.
-sub: file type NAME | `file`, `directory`, `link`, and others.
-sub: file attributes NAME ?OPTION ?VALUE ...?? | The attributes of the platform, such as `-permissions`.
-sub: file mkdir ?DIR ...? | Makes folders, with each missing parent.
-sub: file copy ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Copies files and folders.
-sub: file rename ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Moves files and folders.
-sub: file delete ?-force? ?--? ?NAME ...? | Removes files, and folders with `-force`.
-sub: file link ?-symbolic|-hard? LINK ?TARGET? | Makes a link, or gives its target.
-sub: file readlink NAME | The target of a symbolic link.
-sub: file tempfile ?VAR? ?TEMPLATE? | Opens a new temporary file and gives its channel.
-sub: file channels ?PATTERN? | The names of the open channels.
-sub: file system NAME | The file system of a path.
-sub: file volumes | The volumes, such as `/`.
-ex: file join notes 2026 a.json => notes/2026/a.json
-ex: file extension notes.json => .json
-ex: file mkdir data; file isdirectory data => 1
-
 == glob
 syn: glob ?switches? name ?name ...?
 does: The names of the files that match glob patterns. In Tcl 8.6 a pattern with no match is an error, unless `-nocomplain`. In Tcl 9.1 it gives an empty list.
