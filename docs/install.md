@@ -34,6 +34,8 @@ tar xzf ztcl-1.0.0-beta.1-x86_64-linux-musl.tar.gz
 ./ztcl-1.0.0-beta.1-x86_64-linux-musl/ztcl script.tcl
 ```
 
+`ztcl --version` (or `ztcl version`) prints the version, such as `ztcl 1.0.0-beta.1`.
+
 ## npm
 
 The package [`@beetlebug/ztcl`](https://www.npmjs.com/package/@beetlebug/ztcl) has the WebAssembly build, the JS module, the worker, and the TypeScript types. It works with a bundler, in Node.js 22.3 or later, and from a CDN with no build step.
