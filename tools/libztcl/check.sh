@@ -13,7 +13,9 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../.." && pwd)
 lib=$(CDPATH= cd -- "${1:-$root/zig-out/lib}" && pwd)
 tclsh=${TCLSH:-tclsh}
-cc=${CC:-cc}
+# The C compiler: cc, or zig cc when the host has no cc (the container
+# of the self-hosted runner).
+if [ -n "${CC:-}" ]; then cc=$CC; elif command -v cc > /dev/null; then cc=cc; else cc="${ZIG:-zig} cc"; fi
 cfg=$(echo 'puts [info library]' | "$tclsh")/tclConfig.sh
 for c in "$cfg" /usr/lib/tclConfig.sh /usr/lib/tcl8.6/tclConfig.sh /usr/lib/x86_64-linux-gnu/tcl8.6/tclConfig.sh /usr/local/lib/tclConfig.sh /opt/homebrew/lib/tclConfig.sh; do
   [ -f "$c" ] && { cfg=$c; break; }

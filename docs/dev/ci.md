@@ -133,7 +133,7 @@ The 6-hourly full run always runs on GitHub, so it also checks main when our run
 
 ### The image
 
-`ci/runner/Dockerfile` builds the image: Ubuntu 24.04 (pinned by digest), Zig 0.17.0 and Node.js 22 (each pinned by SHA-256), Tcl 8.6 with its headers, qemu-user, Python 3, git, and curl. `ci-image.yml` builds it for x86-64 and arm64 on a push to main that changes `ci/runner/`, and publishes `ghcr.io/beetlebugorg/ztcl-ci:<tag>`. The tag is the first 16 digits of the SHA-256 of the Dockerfile, and `ci.yml` computes the same tag.
+`ci/runner/Dockerfile` builds the image: Ubuntu 24.04 (pinned by digest), Zig 0.17.0 and Node.js 22 (each pinned by SHA-256), Tcl 8.6.16 built from its source release (`ci/runner/build-tcl.sh`, pinned by SHA-256) with its headers, stub library, and `/usr/local/lib/tclConfig.sh`, qemu-user, Python 3, git, and curl. `ci-image.yml` builds it for x86-64 and arm64 on a push to main that changes `ci/runner/`, and publishes `ghcr.io/beetlebugorg/ztcl-ci:<tag>`. The tag is the first 16 digits of the SHA-256 of the Dockerfile, and `ci.yml` computes the same tag. The jobs that compare with tclsh on the runners of GitHub build Tcl 8.6.16 with the same script, because Ubuntu 24.04 has 8.6.14 and the tests expect 8.6.16.
 
 ### Threat model
 

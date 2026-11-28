@@ -339,9 +339,15 @@ jobs:
         if: needs.changes.outputs.self != 'true'
         with:
           version: ${{ env.ZIG_VERSION }}
-      - name: Install tclsh and the Tcl headers
+      # Tcl 8.6.16 from its source release, as in the CI image
+      # (ci/runner/build-tcl.sh): Ubuntu 24.04 has 8.6.14.
+      - name: Build and install Tcl 8.6.16
         if: needs.changes.outputs.self != 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
+        run: |
+          ci/runner/build-tcl.sh "$HOME/tcl-dest"
+          sudo cp -a "$HOME/tcl-dest/usr/local/." /usr/local/
+          sudo ldconfig
+          echo 'puts [info patchlevel]' | tclsh8.6 | grep -x 8.6.16
       - name: Build and test with -Dcext
         run: |
           ulimit -v 6000000
@@ -389,9 +395,15 @@ jobs:
         if: needs.changes.outputs.self != 'true'
         with:
           node-version: 22
-      - name: Install tclsh and the Tcl headers
+      # Tcl 8.6.16 from its source release, as in the CI image
+      # (ci/runner/build-tcl.sh): Ubuntu 24.04 has 8.6.14.
+      - name: Build and install Tcl 8.6.16
         if: needs.changes.outputs.self != 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
+        run: |
+          ci/runner/build-tcl.sh "$HOME/tcl-dest"
+          sudo cp -a "$HOME/tcl-dest/usr/local/." /usr/local/
+          sudo ldconfig
+          echo 'puts [info patchlevel]' | tclsh8.6 | grep -x 8.6.16
       - name: Build the stub library and ztcl-host.wasm
         run: zig build cext-stubs wasm-host -Dcext-wasm=true
       - name: Compare the test packages with tclsh
@@ -877,9 +889,15 @@ jobs:
         run: zig build wasm-fuzz -- -seed "$GITHUB_RUN_NUMBER" -count 300
       - name: WASI programs
         run: zig build && tests/wasm/run.sh
-      - name: Install tclsh and the Tcl headers
+      # Tcl 8.6.16 from its source release, as in the CI image
+      # (ci/runner/build-tcl.sh): Ubuntu 24.04 has 8.6.14.
+      - name: Build and install Tcl 8.6.16
         if: needs.changes.outputs.self != 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
+        run: |
+          ci/runner/build-tcl.sh "$HOME/tcl-dest"
+          sudo cp -a "$HOME/tcl-dest/usr/local/." /usr/local/
+          sudo ldconfig
+          echo 'puts [info patchlevel]' | tclsh8.6 | grep -x 8.6.16
       - name: C packages in WebAssembly through the engine
         run: zig build cext-stubs && TCLSH=tclsh8.6 tools/cext/engine-check.sh
       # The first failure stops the other jobs of the run. curl is in
