@@ -359,12 +359,11 @@ pub fn build(b: *std.Build) void {
 
     // The stubs table of a C package in WebAssembly (docs/dev/cext-tasks/04w-wasm-bridge.md).
     // It links into the package and is never part of ztcl.
-    // Zig 0.17 has no std.builtin.VaList with LLVM on x86-64 Windows and
-    // on arm64 Linux, and the variadic slots use it, so these tests skip
-    // those targets.
+    // Zig 0.17 has no std.builtin.VaList with LLVM on x86-64 Windows, and
+    // the variadic slots use it, so these tests skip that target. arm64
+    // Linux has the va_list of src/cext/va.zig.
     const stubs_step = b.step("test-cext", "Run the tests of the stubs table of C packages");
-    const no_valist = (target.result.os.tag == .windows and target.result.cpu.arch == .x86_64) or
-        (target.result.os.tag == .linux and target.result.cpu.arch == .aarch64);
+    const no_valist = target.result.os.tag == .windows and target.result.cpu.arch == .x86_64;
     if (!no_valist) {
         const stubs_tests = b.addTest(.{ .root_module = addCextStubs(b, target, optimize) });
         test_step.dependOn(&b.addRunArtifact(stubs_tests).step);

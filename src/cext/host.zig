@@ -578,7 +578,9 @@ pub fn Tcl_GlobalEval(ip: *Interp, script: [*:0]const u8) callconv(.c) c_int {
     return evalText(ip, std.mem.span(script), TCL_EVAL_GLOBAL);
 }
 
-pub fn Tcl_VarEval(ip: *Interp, ...) callconv(.c) c_int {
+pub const Tcl_VarEval = if (obj.va.own) obj.va.Stub(1, "ztcl_va_VarEval").f else varEval;
+
+fn varEval(ip: *Interp, ...) callconv(.c) c_int {
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     var out: std.ArrayList(u8) = .empty;
@@ -882,7 +884,7 @@ pub fn Tcl_VarEvalVA(ip: *Interp, va: obj.VaArg) callconv(.c) c_int {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(gpa);
     while (true) {
-        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        const p = obj.va.arg(ap, ?[*:0]const u8) orelse break;
         out.appendSlice(gpa, std.mem.span(p)) catch panicText("out of memory");
     }
     return evalText(ip, out.items, 0);
@@ -1224,4 +1226,10 @@ test "Tcl_CommandComplete follows info complete" {
     try std.testing.expect(complete("set a \\{"));
     try std.testing.expect(complete("# {\n"));
     try std.testing.expect(!complete("puts \"[x\""));
+}
+
+comptime {
+    if (obj.va.own) {
+        obj.va.exportBody(&Tcl_VarEvalVA, "ztcl_va_VarEval");
+    }
 }

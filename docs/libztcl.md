@@ -78,6 +78,6 @@ The headers of Tcl describe the ABI of libztcl, with these differences:
 - The bignum functions of `tclTomMath.h` (`TclBN_*`) are not in libztcl yet, and `Tcl_TomMath_InitStubs` gives an error.
 - The functions of TclOO (`tclOO.h`) and the private headers (`tclInt.h`, `tclPort.h`) are not in the kit.
 - `Tcl_ThreadQueueEvent` and `Tcl_ThreadAlert` are not in libztcl yet.
-- There is no Windows build yet, and no arm64 Linux build: Zig 0.17 has no `VaList` with LLVM on those targets.
+- There is no Windows build yet: Zig 0.17 has no `VaList` with LLVM on x86-64 Windows. On arm64 Linux, where Zig 0.17 has no C variadic functions, the variadic functions of the API (`Tcl_AppendResult`, `Tcl_Panic`, `Tcl_ObjPrintf`, and the others) are entry points of ztcl with the `va_list` of AAPCS64 (`src/cext/va.zig`).
 
 [docs/dev/libztcl.md](dev/libztcl.md) has the internals, the list of missing functions, and the programs that were tested.

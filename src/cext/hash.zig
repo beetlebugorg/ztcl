@@ -248,11 +248,11 @@ fn createEntry(t: *Table, key_c: ?*const anyopaque, new: ?*c_int) callconv(.c) ?
 }
 
 fn deletedFind(_: *Table, _: ?*const anyopaque) callconv(.c) ?*Entry {
-    mem.Tcl_Panic("called Tcl_FindHashEntry on deleted table");
+    @import("mem.zig").panicf("called Tcl_FindHashEntry on deleted table", .{});
 }
 
 fn deletedCreate(_: *Table, _: ?*const anyopaque, _: ?*c_int) callconv(.c) ?*Entry {
-    mem.Tcl_Panic("called Tcl_CreateHashEntry on deleted table");
+    @import("mem.zig").panicf("called Tcl_CreateHashEntry on deleted table", .{});
 }
 
 /// Gives the table 4 times the buckets.
@@ -302,7 +302,7 @@ pub fn Tcl_InitHashTable(t: *Table, key_type: c_int) callconv(.c) void {
     const kt: *const KeyType = switch (key_type) {
         string_keys => &string_type,
         one_word_keys => &one_word_type,
-        else => if (key_type > 1) &words_type else mem.Tcl_Panic("Tcl_InitHashTable: the key type of a custom table needs Tcl_InitCustomHashTable"),
+        else => if (key_type > 1) &words_type else @import("mem.zig").panicf("Tcl_InitHashTable: the key type of a custom table needs Tcl_InitCustomHashTable", .{}),
     };
     init(t, key_type, kt);
 }
@@ -332,7 +332,7 @@ pub fn Tcl_DeleteHashEntry(e: *Entry) callconv(.c) void {
             link.* = e.next;
             break;
         }
-    } else mem.Tcl_Panic("malformed bucket chain in Tcl_DeleteHashEntry");
+    } else @import("mem.zig").panicf("malformed bucket chain in Tcl_DeleteHashEntry", .{});
     t.num_entries -= 1;
     freeEntry(t, e);
 }
@@ -429,9 +429,9 @@ pub fn Tcl_SetAssocData(ip: *Interp, name: [*:0]const u8, proc: ?InterpDeletePro
         return;
     }
     const src = std.mem.span(name);
-    const copy = gpa.allocSentinel(u8, src.len, 0) catch mem.Tcl_Panic("unable to alloc the assoc data");
+    const copy = gpa.allocSentinel(u8, src.len, 0) catch @import("mem.zig").panicf("unable to alloc the assoc data", .{});
     @memcpy(copy, src);
-    const a = gpa.create(Assoc) catch mem.Tcl_Panic("unable to alloc the assoc data");
+    const a = gpa.create(Assoc) catch @import("mem.zig").panicf("unable to alloc the assoc data", .{});
     a.* = .{ .next = @ptrCast(@alignCast(ip.assoc)), .name = copy, .proc = proc, .data = data };
     ip.assoc = a;
 }
