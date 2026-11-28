@@ -181,7 +181,6 @@ command file {
         description {Gives the separator of paths: `\` in host mode on Windows, and `/` in the root folder and on Linux and macOS. With NAME it gives the same separator.}
         returns {The separator.}
         see {{file nativename} {file join}}
-        difference {Tcl 8.6.16 and 9.0.4 give an error for more than one argument ([issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
         argument NAME {
             type path
             optional
@@ -189,7 +188,7 @@ command file {
         }
         example {file separator} /
         example {file separator a/b} /
-        noerrors {Each call gives the separator. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        error {file separator a b} {wrong # args: should be "file separator ?name?"} {TCL WRONGARGS}
     }
 
     subcommand mkdir {
@@ -696,7 +695,6 @@ command file {
         description {Makes a new empty file in the working folder, opens it for reading and writing, and gives its channel. With VAR it sets VAR to the absolute path of the file. ztcl names the file `tcl_tmpN` and does not use TEMPLATE. The file stays after `close`: delete it with `file delete`.}
         returns {The name of the channel.}
         see {open close {file delete}}
-        difference {ztcl accepts more arguments than tclsh allows ([issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
         argument VAR {
             type {variable name}
             optional
@@ -718,7 +716,7 @@ command file {
             close $f
             set r
         } 1
-        noerrors {A call opens a new file. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        error {file tempfile a b c} {wrong # args: should be "file tempfile ?nameVar? ?template?"} {TCL WRONGARGS}
     }
 
     subcommand channels {
@@ -742,13 +740,12 @@ command file {
         description {Gives a list of the kind of the file system and its name. In the root folder it is `native root` for each path. In host mode on Windows the name is the type of the volume, such as `native NTFS`.}
         returns {A list of two words.}
         see {{file volumes}}
-        difference {Tcl 8.6.16 and 9.0.4 give an error for more than one argument ([issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
         argument NAME {
             type path
             summary {The path.}
         }
         example {file system n.txt} {native root}
-        noerrors {Each path gives a list of two words. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        error {file system a b} {wrong # args: should be "file system name"} {TCL WRONGARGS}
     }
 
     subcommand volumes {
@@ -758,6 +755,6 @@ command file {
         returns {A list of volumes.}
         see {{file system}}
         example {file volumes} /
-        noerrors {Each call gives a list. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        error {file volumes a} {wrong # args: should be "file volumes"} {TCL WRONGARGS}
     }
 }

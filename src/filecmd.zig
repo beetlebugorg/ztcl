@@ -499,6 +499,9 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // In host mode on Windows: the separator, the drives, and the file
     // system of the host, as in tclsh. In the root folder: `/`, one volume,
     // and the file system `root`.
+    if (eql(s, "separator") and args.len > 1) return it.wrongArgs("file separator ?name?");
+    if (eql(s, "volumes") and args.len > 0) return it.wrongArgs("file volumes");
+    if (eql(s, "system") and args.len > 1) return it.wrongArgs("file system name");
     if (eql(s, "separator")) return .{ .str = if (it.fs.host and @import("builtin").os.tag == .windows) "\\" else "/" };
     if (eql(s, "volumes")) return .{ .str = (try fsroot.hostVolumes(it)) orelse "/" };
     if (eql(s, "system")) {
@@ -577,6 +580,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(s, "rename")) return renameOrCopy(it, args, true);
     if (eql(s, "copy")) return renameOrCopy(it, args, false);
     if (eql(s, "tempfile")) {
+        if (args.len > 2) return it.wrongArgs("file tempfile ?nameVar? ?template?");
         var n: u32 = 0;
         while (n < 1000) : (n += 1) {
             const name = try std.fmt.allocPrint(a, "tcl_tmp{d}", .{it.temp_next});
