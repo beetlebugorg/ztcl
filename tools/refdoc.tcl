@@ -56,7 +56,7 @@ namespace eval refdoc {
     variable KEYS {
         command block subcommand block option block argument block
         summary prose description prose returns prose noerrors prose
-        since text tcl text capability text cost text page text area text kind text
+        since text tcl text capability text cost text page text area text kind text setup text
         type text default text value text dbname text dbclass text
         synopsis repeat release repeat difference repeat
         see list names list flags list values list
@@ -66,7 +66,7 @@ namespace eval refdoc {
     # The keys of each kind of node. A key in REQUIRED must be there.
     variable ALLOWED
     array set ALLOWED {
-        command {area kind since synopsis summary description returns tcl capability flags cost names page see release difference noerrors argument option example error subcommand}
+        command {area kind since setup synopsis summary description returns tcl capability flags cost names page see release difference noerrors argument option example error subcommand}
         subcommand {since synopsis summary description returns tcl capability flags cost see release difference noerrors argument option example error}
         option {value type default values choice summary description since tcl see noerrors dbname dbclass example error}
         argument {type summary description default optional repeats values choice}
@@ -446,8 +446,9 @@ proc refdoc::groups {e} {
     return $out
 }
 
-proc refdoc::run {runner flags release items} {
-    set script {}
+proc refdoc::run {runner flags release items {setup {}}} {
+    # The setup of the entry, such as `package require`, runs first.
+    set script "$setup\n"
     foreach item $items {
         append script "puts -nonewline \"\\x1d\"\n"
         append script "set ::__s [tclword [dict get [lindex $item 2] code]]\n"
@@ -502,7 +503,7 @@ proc refdoc::check {runner {only {}}} {
                     if {$rel eq "" || ![dict exists $x tcl] || [dict get $x tcl] eq $rel} { lappend run $item }
                 }
                 if {![llength $run]} continue
-                lassign [run $runner $flags $r $run] out got
+                lassign [run $runner $flags $r $run [get $e setup]] out got
                 set tag [expr {$rel eq "" ? "" : " (Tcl $rel)"}]
                 if {[llength $got] != [llength $run]} {
                     lappend fails "[get $e file]: $label$tag: [llength $got] of [llength $run] examples ran: [string trim $out]"
@@ -850,7 +851,8 @@ proc refdoc::pages {} {
             }
             lappend body [arguments_html $t] [options_html $t [expr {$kind eq "widget" && !$sub}]]
             if {[has $t returns]} { lappend body "<h2 id=\"returns\">Returns</h2>[blocks [get $t returns]]" }
-            if {[llength [get $t examples]]} { lappend body "<h2 id=\"examples\">Examples</h2>[examples_html [get $t examples] example]" }
+            set pre [expr {[has $e setup] ? "<p class=\"ref-setup\">Each example of this page runs after <code>[esc [get $e setup]]</code>.</p>" : ""}]
+            if {[llength [get $t examples]]} { lappend body "<h2 id=\"examples\">Examples</h2>$pre[examples_html [get $t examples] example]" }
             if {[llength [get $t errors]]} {
                 lappend body "<h2 id=\"errors\">Errors</h2>[examples_html [get $t errors] error]"
             } elseif {[has $t noerrors]} {
