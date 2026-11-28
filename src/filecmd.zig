@@ -377,7 +377,12 @@ fn renameOrCopy(it: *Interp, args: []const Value, is_rename: bool) Error!Value {
             .ok => true,
             .err => false,
         };
-        if (exists and !force) return it.failCode("POSIX EEXIST {file already exists}", "error {s} \"{s}\" to \"{s}\": target file exists", .{ verb, src, target });
+        if (exists and !force) {
+            // The name of the file that exists, as in tclsh: the target,
+            // or the path in the target folder.
+            const shown = if (!into_dir) target else if (std.mem.endsWith(u8, target, "/")) try std.fmt.allocPrint(a, "{s}{s}", .{ target, tailOf(src) }) else try std.fmt.allocPrint(a, "{s}/{s}", .{ target, tailOf(src) });
+            return it.failCode("POSIX EEXIST {file already exists}", "error {s} \"{s}\" to \"{s}\": file already exists", .{ verb, src, shown });
+        }
         if (!is_rename) {
             try copyTree(it, srel, drel, src, target);
             continue;

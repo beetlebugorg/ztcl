@@ -501,7 +501,7 @@ command file {
         }
         returns {An empty string.}
         see {{file rename} {file delete}}
-        difference {Tcl 8.6.16 and 9.0.4 say `file already exists` and `file exists` for a target that exists ([issue 683](https://github.com/beetlebugorg/ztcl/issues/683)).}
+        difference {Tcl 9.0.4 on Windows says `file exists` for a target that exists, with `-errorcode POSIX EEXIST {file exists}`. ztcl says `file already exists` as Tcl 8.6.16 does.}
         argument SOURCE {
             type path
             repeats
@@ -532,7 +532,7 @@ command file {
             set f [open n2.txt w]; close $f
             file copy n2.txt m2.txt
             file copy n2.txt m2.txt
-        } {error copying "n2.txt" to "m2.txt": target file exists} {POSIX EEXIST {file already exists}}
+        } {error copying "n2.txt" to "m2.txt": file already exists} {POSIX EEXIST {file already exists}}
         error {file copy} {wrong # args: should be "file copy ?-option value ...? source ?source ...? target"} NONE
         option -force {
             type flag
