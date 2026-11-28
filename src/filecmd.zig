@@ -470,7 +470,15 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const p = try one(it, s, args);
         return .{ .str = p[0 .. p.len - extOf(p).len] };
     }
-    if (eql(s, "nativename")) return .{ .str = try one(it, s, args) };
+    if (eql(s, "nativename")) {
+        const p = try one(it, s, args);
+        // In host mode on Windows the native separator is `\`, as in
+        // tclsh. In the root folder the names are the names of a script.
+        if (!(it.fs.host and @import("builtin").os.tag == .windows)) return .{ .str = p };
+        const native = try a.dupe(u8, p);
+        std.mem.replaceScalar(u8, native, '/', '\\');
+        return .{ .str = native };
+    }
     if (eql(s, "pathtype")) {
         const p = try one(it, s, args);
         // In host mode on Windows, as in tclsh: a drive or a share is
@@ -479,9 +487,15 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (it.fs.host and @import("builtin").os.tag == .windows and p.len > 0 and p[0] == '/') return .{ .str = "volumerelative" };
         return .{ .str = if (p.len > 0 and p[0] == '/') "absolute" else "relative" };
     }
-    if (eql(s, "separator")) return .{ .str = "/" };
-    if (eql(s, "volumes")) return .{ .str = "/" };
-    if (eql(s, "system")) return value.newList(a, &.{ .{ .str = "native" }, .{ .str = "root" } });
+    // In host mode on Windows: the separator, the drives, and the file
+    // system of the host, as in tclsh. In the root folder: `/`, one volume,
+    // and the file system `root`.
+    if (eql(s, "separator")) return .{ .str = if (it.fs.host and @import("builtin").os.tag == .windows) "\\" else "/" };
+    if (eql(s, "volumes")) return .{ .str = (try fsroot.hostVolumes(it)) orelse "/" };
+    if (eql(s, "system")) {
+        const name = if (args.len > 0) (try fsroot.hostFsName(it, try it.str(args[0]))) else null;
+        return value.newList(a, &.{ .{ .str = "native" }, .{ .str = name orelse "root" } });
+    }
     if (eql(s, "channels")) {
         if (args.len > 1) return it.wrongArgs("file channels ?pattern?");
         const pat: ?[]const u8 = if (args.len == 1) try it.str(args[0]) else null;

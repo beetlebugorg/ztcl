@@ -153,6 +153,24 @@ fn prefixOf(path: []const u8) ?[]const u8 {
     return null;
 }
 
+/// In host mode on Windows: the drives of the system for `file volumes`
+/// (`C:/ D:/`), or null elsewhere.
+pub fn hostVolumes(it: *Interp) Error!?[]const u8 {
+    if (comptime !on_win) return null;
+    if (!it.fs.host) return null;
+    return try win.volumes(it.alloc());
+}
+
+/// In host mode on Windows: the name of the file system (NTFS) of the
+/// volume of `path`, a drive, a share, or the volume of the current
+/// folder, or null.
+pub fn hostFsName(it: *Interp, path: []const u8) Error!?[]const u8 {
+    if (comptime !on_win) return null;
+    if (!it.fs.host) return null;
+    const prefix = prefixOf(path) orelse prefixOf(it.fs.cwd) orelse return null;
+    return try win.fsName(it.alloc(), prefix);
+}
+
 /// The drive or the share at the start of a path in host mode on
 /// Windows (`C:` of `C:/a`), or null. `glob` starts its walk there.
 pub fn hostPrefix(it: *const Interp, path: []const u8) ?[]const u8 {
