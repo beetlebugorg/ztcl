@@ -29,6 +29,8 @@ pub const Handle = struct {
     result: []const u8 = "",
     /// The files of the bundle, for `ztcl_allow` with `file`.
     files: wasmfiles.State = .{},
+    /// The payload of `ztcl_files_set`, in the memory of `gpa`.
+    host_files: []u8 = &.{},
     /// The point procs, after `ztcl_point_install`.
     points: ztcl.point.State = .{},
     point_on: bool = false,
@@ -191,6 +193,7 @@ export fn ztcl_delete(h: *Handle) void {
     for (h.point_names.items) |n| gpa.free(n);
     h.point_names.deinit(gpa);
     h.files.deinit(gpa);
+    gpa.free(h.host_files);
     h.out.deinit(gpa);
     h.taken.deinit(gpa);
     h.it.deinit();
@@ -563,11 +566,46 @@ fn ztcl_allow_plain(h: *Handle, bits: u32) callconv(.c) i32 {
     const file = @backingInt(Capability.file);
     if (bits & ~file != 0) return 2;
     if (bits == 0) return 0;
-    // The ports of Web Serial can turn the commands on first.
-    h.files.payload = payload();
+    // The ports of Web Serial can turn the commands on first. The files
+    // of `ztcl_files_set` stay in place of the bundle.
+    if (h.host_files.len == 0) h.files.payload = payload();
     if (h.files.on) return 0;
     h.files.on = true;
-    wasmfiles.Commands(filesOf, gpa, false).register(&h.it) catch return 1;
+    // The shell build of the site writes files in memory, so a live
+    // example can make a PDF that the page reads back.
+    wasmfiles.Commands(filesOf, gpa, build_options.shell).register(&h.it) catch return 1;
+    return 0;
+}
+
+/// Gives the interpreter the files of a bundle payload (the form of
+/// src/wasmbundle.zig), in place of the bundle of the module, for
+/// `ztcl_allow` with `file`. The interpreter keeps a copy. Gives 0, or 1
+/// when the memory ends.
+export fn ztcl_files_set(h: *Handle, ptr: [*]const u8, len: usize) i32 {
+    const copy = gpa.dupe(u8, ptr[0..len]) catch return 1;
+    gpa.free(h.host_files);
+    h.host_files = copy;
+    h.files.payload = copy;
+    return 0;
+}
+
+/// Sets the result to the names of the files that the scripts wrote in
+/// memory, one for each line.
+export fn ztcl_file_names(h: *Handle) i32 {
+    var out: std.ArrayList(u8) = .empty;
+    for (h.files.files.keys()) |k| {
+        out.appendSlice(h.it.alloc(), k) catch return 1;
+        out.append(h.it.alloc(), '\n') catch return 1;
+    }
+    h.result = out.items;
+    return 0;
+}
+
+/// Sets the result to the bytes of a file that a script wrote in
+/// memory. Gives 0, or 1 when no such file exists.
+export fn ztcl_file_get(h: *Handle, ptr: [*]const u8, len: usize) i32 {
+    const f = h.files.files.get(ptr[0..len]) orelse return 1;
+    h.result = f.data.items;
     return 0;
 }
 

@@ -926,6 +926,9 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     // is only in the shell build of the site, which has the live examples.
     if (!shell) mods_on[moduleIndex("probe")] = false;
     if (!shell) mods_on[moduleIndex("disasm")] = false;
+    // ztcl::typeset and ztcl::pdf are in the shell build only, for the
+    // live examples of the site.
+    if (!shell) mods_on[moduleIndex("typeset")] = false;
     // The browser has no TCP sockets, so no wasm build has `ztcl::tls`.
     mods_on[moduleIndex("tls")] = false;
     addModuleOptions(b, wasm_options, mods_on);

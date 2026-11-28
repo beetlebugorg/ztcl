@@ -4,10 +4,12 @@
 import { compile, Interp } from "./ztcl.mjs";
 
 let module = null;
+// The capabilities and the files of the interpreter (WorkerInterp).
+let setup = {};
 let interp = null;
 
 async function current() {
-  if (!interp) interp = await Interp.create(await module);
+  if (!interp) interp = await Interp.create(await module, { allow: setup.allow ?? [], files: setup.files ?? null });
   return interp;
 }
 
@@ -20,6 +22,7 @@ self.onmessage = ({ data }) => {
 async function handle(data) {
   if (data.init) {
     module = compile(data.init);
+    setup = data.setup ?? {};
     return;
   }
   if (data.reset) {
@@ -32,7 +35,13 @@ async function handle(data) {
     it.computeLimit = data.computeLimit;
     if (data.memLimit != null) it.memLimit = data.memLimit;
     const r = it.eval(data.script);
-    self.postMessage({ id: data.id, ...r, memorySize: it.memorySize });
+    // With `collect`, the files that the scripts wrote go back too.
+    let files;
+    if (data.collect) {
+      files = {};
+      for (const n of it.fileNames()) files[n] = it.readFile(n);
+    }
+    self.postMessage({ id: data.id, ...r, memorySize: it.memorySize, files }, files ? Object.values(files).map((b) => b.buffer) : []);
   } catch (e) {
     self.postMessage({ id: data.id, error: String(e && e.message ? e.message : e) });
   }
