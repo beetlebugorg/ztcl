@@ -319,19 +319,25 @@ class Build:
 
     @staticmethod
     def course_html(page, setup, files):
-        """The shell of the Learn course: a panel at the right of a wide
-        window and a sheet at the bottom of a narrow one. It is fixed in
-        the window, so that a Run link never scrolls the page. shell.js
-        runs the checkpoint of the lesson (setup), then the commands that
-        the reader ran on this lesson in this tab."""
+        """The shell of the Learn course. It starts closed, as the button
+        Try it at the bottom right of the window. The button and each Run
+        link open it: as a panel at the bottom right of a wide window,
+        which the reader can resize and close, and as a sheet at the
+        bottom of a narrow one. It is fixed in the window, so that a Run
+        link never scrolls the page. shell.js runs the checkpoint of the
+        lesson (setup), then the commands that the reader ran on this
+        lesson in this tab. With no JavaScript the button and the shell
+        stay hidden."""
         banner = "ztcl in your browser. No network or clock.\\nThe state of this page is loaded.\\nEach command can use 10,000,000 compute units."
         if files:
             banner += "\\nRead-only files:" + "".join(f" {n}" for n in files)
         data = json.dumps({"setup": setup or "", "files": files}).replace("</", "<\\/")
         lesson = page.strip("/").replace("/", ":")
         return f"""<aside class="zcourse-dock" aria-label="The shell of the course">
+<button type="button" class="zcourse-open" aria-controls="shell" aria-expanded="false" hidden>Try it</button>
 <div class="zshell zpage-shell zcourse" id="shell" data-rows="12" data-lesson="{lesson}" data-label="ztcl shell of this page. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
-  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><button type="button" class="zcourse-again">Start again</button><button type="button" class="zcourse-size" aria-expanded="true">Make small</button></div>
+  <span class="zcourse-grip" aria-hidden="true" title="Drag to resize"></span>
+  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><button type="button" class="zcourse-again">Start again</button><button type="button" class="zcourse-close">Close</button></div>
 <pre class="zshell-poster" aria-hidden="true">{html.escape(banner.replace("\\n", chr(10)))}
 <span class="p">%</span> </pre>
   <div class="zshell-foot">

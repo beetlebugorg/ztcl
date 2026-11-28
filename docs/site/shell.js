@@ -67,11 +67,14 @@ class View {
     const probe = document.createElement("canvas").getContext("2d");
     probe.font = this.font;
     this.cellW = probe.measureText("MMMMMMMMMM").width / 10;
-    this.cols0 = this.colsFor(this.poster.clientWidth);
+    // A course shell can start in a closed dock (for a helper), with no
+    // size: it then starts at 60 columns, and fit() sets its size when
+    // the dock opens.
+    this.cols0 = this.poster.clientWidth ? this.colsFor(this.poster.clientWidth) : 60;
     // A shell of the Learn course (class zcourse) fills its panel. It
     // keeps the commands of the reader for its lesson in sessionStorage.
     this.course = el.dataset.lesson ? `ztcl-learn:${el.dataset.lesson}` : null;
-    if (this.course) this.rows = Math.max(4, Math.floor((this.poster.clientHeight - 20) / this.lineH));
+    if (this.course && this.poster.clientHeight) this.rows = Math.max(4, Math.floor((this.poster.clientHeight - 20) / this.lineH));
     await this.boot(true);
 
     const box = document.createElement("div");
@@ -117,15 +120,7 @@ class View {
       this.dockBtn.hidden = false;
       this.dockBtn.addEventListener("click", () => { this.dock(!this.docked); this.input.focus({ preventScroll: true }); });
     }
-    if (this.course) {
-      el.querySelector(".zcourse-again")?.addEventListener("click", () => this.again());
-      const size = el.querySelector(".zcourse-size");
-      size?.addEventListener("click", () => {
-        const small = document.body.classList.toggle("zcourse-small");
-        size.textContent = small ? "Make large" : "Make small";
-        size.setAttribute("aria-expanded", String(!small));
-      });
-    }
+    if (this.course) el.querySelector(".zcourse-again")?.addEventListener("click", () => this.again());
     this.fit();
   }
 
@@ -185,6 +180,7 @@ class View {
   // A Run link: the command goes on the line and runs, as if the reader
   // typed it and pressed Enter. The page does not scroll.
   runLine(cmd) {
+    if (this.course) courseDock?.show(true);
     this.shell.setLine(cmd);
     this.keep(cmd);
     this.send(() => this.shell.feed("\r"), true);
@@ -227,8 +223,10 @@ class View {
   put(text) {
     this.shell.setLine(text);
     this.up = 0;
-    // The page does not scroll: a shell out of view docks in the window.
-    if (!this.inView()) this.dock(true);
+    // The page does not scroll: a shell out of view docks in the window,
+    // and a course shell opens its dock.
+    if (this.course) courseDock?.show(true);
+    else if (!this.inView()) this.dock(true);
     this.render();
     this.input.focus({ preventScroll: true });
   }
@@ -254,6 +252,7 @@ class View {
   }
 
   fit() {
+    if (!this.box.clientWidth) return;
     if (this.course) this.rows = Math.max(4, Math.floor(this.box.clientHeight / this.lineH));
     this.shell.resize(this.colsFor(this.box.clientWidth), this.rows);
     this.render();
@@ -602,6 +601,74 @@ export function pageShell() {
   return el ? begin(el) : Promise.reject(new Error("this page has no shell"));
 }
 
+// localStorage can throw (a private window, blocked site data), and the
+// dock then works with no memory.
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* no memory */ } },
+};
+const NARROW = matchMedia("(max-width: 960px)");
+const DOCK_KEY = "ztcl-course-dock";
+const SIZE_KEY = "ztcl-course-size";
+
+// The dock of a course shell (site.css): the button Try it, and the
+// shell as a panel or a sheet. The class "open" of the dock shows the
+// shell. The shell starts when it first shows, since a closed shell is
+// not in view. The state open or closed and the size of the panel stay
+// in localStorage for the next page. A narrow window opens the sheet
+// only on a tap: the stored state does not open it.
+function setupDock(dock) {
+  const button = dock.querySelector(".zcourse-open");
+  const panel = dock.querySelector(".zcourse");
+  const close = dock.querySelector(".zcourse-close");
+  const grip = dock.querySelector(".zcourse-grip");
+  const set = (on, save) => {
+    dock.classList.toggle("open", on);
+    document.body.classList.toggle("zcourse-on", on);
+    button.setAttribute("aria-expanded", String(on));
+    if (save) store.set(DOCK_KEY, on ? "open" : "closed");
+  };
+  const size = (w, h) => {
+    panel.style.setProperty("--dock-w", `${Math.round(w)}px`);
+    panel.style.setProperty("--dock-h", `${Math.round(h)}px`);
+  };
+  try {
+    const s = JSON.parse(store.get(SIZE_KEY) || "null");
+    if (s && s.w > 0 && s.h > 0) size(s.w, s.h);
+  } catch { /* a bad stored size: the default size */ }
+  button.addEventListener("click", () => {
+    set(true, true);
+    begin(panel).then((v) => v.input.focus({ preventScroll: true })).catch(() => {});
+  });
+  close.addEventListener("click", () => {
+    set(false, true);
+    button.focus({ preventScroll: true });
+  });
+  // The grip is at the top left corner and the panel is fixed at the
+  // bottom right, so a drag up and to the left makes the panel larger.
+  grip.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const r = panel.getBoundingClientRect();
+    const x0 = e.clientX, y0 = e.clientY;
+    const move = (m) => size(Math.max(320, r.width + x0 - m.clientX), Math.max(220, r.height + y0 - m.clientY));
+    const up = () => {
+      grip.removeEventListener("pointermove", move);
+      const b = panel.getBoundingClientRect();
+      store.set(SIZE_KEY, JSON.stringify({ w: Math.round(b.width), h: Math.round(b.height) }));
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("lostpointercapture", up, { once: true });
+  });
+  button.hidden = false;
+  document.body.classList.add("zcourse-ready");
+  if (!NARROW.matches && store.get(DOCK_KEY) === "open") set(true, false);
+  return { show: (save) => { if (!dock.classList.contains("open")) set(true, save); } };
+}
+
+const dockEl = typeof WebAssembly === "object" ? document.querySelector(".zcourse-dock") : null;
+const courseDock = dockEl ? setupDock(dockEl) : null;
+
 if (typeof WebAssembly === "object") {
   document.querySelectorAll(".zshell").forEach(mount);
   // The Run links and the code boxes of a lesson.
@@ -609,6 +676,7 @@ if (typeof WebAssembly === "object") {
     const b = e.target.closest?.(".zrun, .zrun-box");
     if (!b) return;
     e.preventDefault();
+    courseDock?.show(true);
     pageShell().then((v) => v.runLine(b.dataset.cmd)).catch(() => {});
   };
   document.addEventListener("click", run);
