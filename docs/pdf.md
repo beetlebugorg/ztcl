@@ -25,6 +25,31 @@ set w [ztcl::pdf measure $doc $serif 11 "Total: \$42.00"]
 ztcl::pdf text $doc $page $serif 11 [expr {540 - $w}] 720 "Total: \$42.00"
 ```
 
+Here is the model as a whole program. In this page it runs in the browser, with the fonts of the site, and the PDF shows under it:
+
+<!-- run -->
+```tcl
+package require ztcl::pdf
+set f [open book/fonts/SourceSerif4-Regular.ttf rb]
+set data [read $f]
+close $f
+set doc [ztcl::pdf create]
+set serif [ztcl::pdf font $doc $data]
+set page [ztcl::pdf page $doc 612 792]
+ztcl::pdf text $doc $page $serif 24 72 720 "Hello from ztcl::pdf"
+set total "Total: \$42.00"
+set w [ztcl::pdf measure $doc $serif 11 $total]
+ztcl::pdf text $doc $page $serif 11 [expr {540 - $w}] 690 $total
+set out [open hello.pdf wb]
+puts -nonewline $out [ztcl::pdf bytes $doc]
+close $out
+puts "hello.pdf: [ztcl::pdf pages $doc] page"
+```
+
+```text
+hello.pdf: 1 page
+```
+
 ## An invoice
 
 `examples/pdf/invoice.tcl` has a colored header, two address blocks, a table of items with right-aligned numbers and rules, the totals, and a justified note at the bottom.

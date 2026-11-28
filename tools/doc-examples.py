@@ -32,6 +32,9 @@ import sys
 import tempfile
 
 FILE = re.compile(r"<!-- file: (\S+) -->\n```\w*\n(.*?)```\n", re.S)
+# A font of the site that an example reads, as the live page gives it.
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+FONT = re.compile(r"book/fonts/[\w.-]+\.ttf")
 CHECKPOINT = re.compile(r"<!-- checkpoint(?:: ([^>]*?))? -->\n```tcl\n(.*?)```\n", re.S)
 STEP = re.compile(r'<!-- define -->\n```tcl\n(.*?)```\n|\[`([^`]+)`\]\(run:(?: "((?:[^"\\]|\\.)*)")?\)', re.S)
 BLOCK = re.compile(r"<!-- run(?:: ([^>]*?))? -->\n```tcl\n(.*?)```\n(?:\n?```text\n(.*?)```\n)?", re.S)
@@ -143,6 +146,15 @@ def main():
             flags = [f for f in (m.group(1) or "").split() if f != "native"]
             with tempfile.TemporaryDirectory() as cwd:
                 files(cwd, text)
+                # An example of ztcl::typeset or ztcl::pdf gets the fonts
+                # that it names and the files of its folder, as the page
+                # gives them to it (docs/site/live.js).
+                if not m.group(1) and re.search(r"ztcl::(typeset|pdf)", m.group(2)):
+                    for font in set(FONT.findall(m.group(2))):
+                        dest = pathlib.Path(cwd, font)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_bytes((ROOT / font).read_bytes())
+                    flags = ["--allow", "channels,file", "--root", cwd]
                 r = subprocess.run([runner, *flags, f.name], capture_output=True, text=True, timeout=60, cwd=cwd)
             pathlib.Path(f.name).unlink()
             want = m.group(3)
