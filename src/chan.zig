@@ -1587,23 +1587,56 @@ fn usageOfChan(it: *Interp, sub: []const u8) Error!void {
     it.result = .{ .str = out.items };
 }
 
+/// The subcommands of `chan`. `isbinary` is in Tcl 9.1 only. A unique
+/// prefix names a subcommand, as in an ensemble of Tcl.
+/// `create`, `push`, `pop`, and `postevent` (reflected channels and
+/// transforms, issue 690) are not here yet. They need a channel whose
+/// driver is a Tcl command (`create`), a stack of transforms on a
+/// channel that each read and write go through (`push`, `pop`), and
+/// the events of such a driver (`postevent`).
+const ChanSub = enum { blocked, close, configure, copy, eof, event, flush, gets, isbinary, names, pending, pipe, puts, read, seek, tell, truncate };
+
 fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    return chanSub(it, argv, cmd) catch |e| {
+        // Tcl 9 names the argument `channel` in each usage of `chan`.
+        if (e == error.TclError and it.tcl9()) {
+            const msg = try it.str(it.result);
+            if (std.mem.startsWith(u8, msg, "wrong # args: should be \"chan ")) {
+                it.result = .{ .str = try std.mem.replaceOwned(u8, it.alloc(), msg, "channelId", "channel") };
+            }
+        }
+        return e;
+    };
+}
+
+fn chanSub(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("chan subcommand ?arg ...?");
-    const sub = try it.str(argv[1]);
+    const word = try it.str(argv[1]);
+    const picked = @import("tcl9.zig").pick(it, ChanSub, word, .{ .v9_1 = &.{.isbinary}, .code = "TCL LOOKUP SUBCOMMAND" }) catch |e| {
+        if (e == error.TclError) it.error_code = try value.newList(it.alloc(), &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "SUBCOMMAND" }, .{ .str = word } });
+        return e;
+    };
+    const sub = @tagName(picked);
     const forward = struct {
-        fn f(x: *Interp, g: interp.NativeFn, v: []const Value, c: ?*Cmd) Error!Value {
+        fn f(x: *Interp, g: interp.NativeFn, v: []const Value, c: ?*Cmd, name: []const u8) Error!Value {
             return g(x, v[1..], c) catch |e| {
-                if (e == error.TclError) try usageOfChan(x, try x.str(v[1]));
+                if (e == error.TclError) try usageOfChan(x, name);
                 return e;
             };
         }
     }.f;
-    if (eql(sub, "close")) return forward(it, cmdClose, argv, cmd);
-    if (eql(sub, "configure")) return forward(it, cmdConfigure, argv, cmd);
-    if (eql(sub, "copy")) return forward(it, cmdFcopy, argv, cmd);
-    if (eql(sub, "eof")) return forward(it, cmdEof, argv, cmd);
-    if (eql(sub, "event")) return forward(it, cmdFileevent, argv, cmd);
-    if (eql(sub, "blocked")) return forward(it, cmdFblocked, argv, cmd);
+    if (eql(sub, "truncate")) return chanTruncate(it, argv);
+    if (eql(sub, "isbinary")) {
+        if (argv.len != 3) return it.wrongArgs("chan isbinary channelId");
+        const c = try find(it, argv[2]);
+        return .{ .int = @intFromBool(c.ext == null and isBinary(c)) };
+    }
+    if (eql(sub, "close")) return forward(it, cmdClose, argv, cmd, sub);
+    if (eql(sub, "configure")) return forward(it, cmdConfigure, argv, cmd, sub);
+    if (eql(sub, "copy")) return forward(it, cmdFcopy, argv, cmd, sub);
+    if (eql(sub, "eof")) return forward(it, cmdEof, argv, cmd, sub);
+    if (eql(sub, "event")) return forward(it, cmdFileevent, argv, cmd, sub);
+    if (eql(sub, "blocked")) return forward(it, cmdFblocked, argv, cmd, sub);
     if (eql(sub, "pending")) {
         if (argv.len != 4) return it.wrongArgs("chan pending mode channelId");
         const mode = try it.str(argv[2]);
@@ -1623,14 +1656,14 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         w.kind = .pipe;
         return value.newList(it.alloc(), &.{ .{ .str = r.name }, .{ .str = w.name } });
     }
-    if (eql(sub, "flush")) return forward(it, cmdFlush, argv, cmd);
-    if (eql(sub, "gets")) return forward(it, cmdGets, argv, cmd);
-    if (eql(sub, "read")) return forward(it, cmdRead, argv, cmd);
-    if (eql(sub, "seek")) return forward(it, cmdSeek, argv, cmd);
-    if (eql(sub, "tell")) return forward(it, cmdTell, argv, cmd);
+    if (eql(sub, "flush")) return forward(it, cmdFlush, argv, cmd, sub);
+    if (eql(sub, "gets")) return forward(it, cmdGets, argv, cmd, sub);
+    if (eql(sub, "read")) return forward(it, cmdRead, argv, cmd, sub);
+    if (eql(sub, "seek")) return forward(it, cmdSeek, argv, cmd, sub);
+    if (eql(sub, "tell")) return forward(it, cmdTell, argv, cmd, sub);
     // `chan puts` runs the built-in puts, also when a script replaced the
     // command `puts`, as in Tcl.
-    if (eql(sub, "puts")) return forward(it, cmds.cmdPuts, argv, cmd);
+    if (eql(sub, "puts")) return forward(it, cmds.cmdPuts, argv, cmd, sub);
     if (eql(sub, "names")) {
         if (argv.len > 3) return it.wrongArgs("chan names ?pattern?");
         var out: std.ArrayList(Value) = .empty;
@@ -1644,7 +1677,35 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
         return value.wrapList(it.alloc(), out.items);
     }
-    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell", .{sub});
+    unreachable;
+}
+
+/// A channel with no change of its bytes: the binary encoding, the
+/// translation `lf` on each open side, and no `-eofchar`.
+fn isBinary(c: *const Channel) bool {
+    const lf_in = !c.readable or c.input == .lf;
+    const lf_out = !c.writable or c.output == .lf;
+    return c.binary and c.enc == null and lf_in and lf_out and c.eof_in == 0 and c.eof_out == 0;
+}
+
+/// `chan truncate channelId ?length?`: writes the buffered output, then
+/// sets the size of the file to `length`, or to the current position.
+fn chanTruncate(it: *Interp, argv: []const Value) Error!Value {
+    if (argv.len != 3 and argv.len != 4) return it.wrongArgs("chan truncate channelId ?length?");
+    const c = try find(it, argv[2]);
+    var len: i64 = 0;
+    if (argv.len == 4) {
+        len = try it.int(argv[3]);
+        if (len < 0) return it.fail("cannot truncate to negative length of file", .{});
+    }
+    const prefix = try std.fmt.allocPrint(it.alloc(), "error during truncate on \"{s}\": ", .{c.name});
+    if (c.ext != null or c.mem or c.kind != .file) return fsroot.posixError(it, .INVAL, prefix);
+    try flushOut(it, c);
+    if (argv.len == 3) len = (try cmdTell(it, &.{ .{ .str = "tell" }, argv[2] }, null)).int;
+    return switch (sys.truncate(c.fd, len)) {
+        .at => Value.empty,
+        .err => |e| fsroot.posixError(it, e, prefix),
+    };
 }
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {

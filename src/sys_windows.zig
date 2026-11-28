@@ -89,6 +89,7 @@ extern "kernel32" fn CloseHandle(h: HANDLE) callconv(.winapi) BOOL;
 extern "kernel32" fn ReadFile(h: HANDLE, buf: [*]u8, n: DWORD, got: *DWORD, over: ?*anyopaque) callconv(.winapi) BOOL;
 extern "kernel32" fn WriteFile(h: HANDLE, buf: [*]const u8, n: DWORD, put: *DWORD, over: ?*anyopaque) callconv(.winapi) BOOL;
 extern "kernel32" fn SetFilePointerEx(h: HANDLE, dist: i64, at: *i64, method: DWORD) callconv(.winapi) BOOL;
+extern "kernel32" fn SetEndOfFile(h: HANDLE) callconv(.winapi) BOOL;
 extern "kernel32" fn GetFileType(h: HANDLE) callconv(.winapi) DWORD;
 extern "kernel32" fn GetSystemDirectoryW(buf: [*]u16, size: u32) callconv(.winapi) u32;
 extern "kernel32" fn CreateFileW(name: [*:0]const u16, access: DWORD, share: DWORD, security: ?*anyopaque, disposition: DWORD, flags: DWORD, template: HANDLE) callconv(.winapi) HANDLE;
@@ -635,6 +636,23 @@ pub fn seek(fd: Fd, off: i64, whence: u8) sys.SeekResult {
     var at: i64 = 0;
     if (SetFilePointerEx(h, off, &at, whence) == 0) return .{ .err = @fromBackingInt(@intCast(GetLastError())) };
     return .{ .at = at };
+}
+
+/// Sets the end of a file at `len` bytes: the position moves there for
+/// `SetEndOfFile`, then goes back.
+pub fn truncate(fd: Fd, len: i64) sys.SeekResult {
+    if (isSocket(fd)) return .{ .err = @fromBackingInt(@intCast(error_invalid_function)) };
+    const h = handleOf(fd);
+    if (GetFileType(h) != file_type_disk) return .{ .err = @fromBackingInt(@intCast(error_invalid_function)) };
+    var was: i64 = 0;
+    var at: i64 = 0;
+    if (SetFilePointerEx(h, 0, &was, 1) == 0) return .{ .err = @fromBackingInt(@intCast(GetLastError())) };
+    if (SetFilePointerEx(h, len, &at, 0) == 0) return .{ .err = @fromBackingInt(@intCast(GetLastError())) };
+    const ok = SetEndOfFile(h) != 0;
+    const code = GetLastError();
+    _ = SetFilePointerEx(h, was, &at, 0);
+    if (!ok) return .{ .err = @fromBackingInt(@intCast(code)) };
+    return .{ .at = len };
 }
 
 /// True when a child process can inherit the handle.

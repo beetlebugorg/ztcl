@@ -313,6 +313,13 @@ pub fn poll(_: std.mem.Allocator, wants: []sys.Want, _: i32) void {
 }
 
 /// Sets the position of a slot. The end of the file comes from `stat`.
+/// The descriptors of WASI 0.3 have `set-size`, and this build does not
+/// call it yet.
+pub fn truncate(fd: i32, len: i64) sys.SeekResult {
+    _ = .{ fd, len };
+    return .{ .err = .NOSYS };
+}
+
 pub fn seek(fd: i32, off: i64, whence: u8) sys.SeekResult {
     const s = slotOf(fd) orelse return .{ .err = if (fd < 3) .SPIPE else .BADF };
     var base: i64 = switch (whence) {
