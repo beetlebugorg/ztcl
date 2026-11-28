@@ -669,20 +669,24 @@ sub: ztcl::vt title HANDLE | Gives the title of a terminal.
 sub: ztcl::vt bells HANDLE | Gives the count of bells since the terminal was made.
 sub: ztcl::vt delete HANDLE | Frees a terminal.
 == ztcl::wasm
-syn: ztcl::wasm subcommand ?arg ...?
-sub: load fileName | Reads, decodes, and validates a module file, and gives a module handle.
-sub: new bytes | Decodes and validates the bytes of a module, and gives a module handle.
-sub: instantiate module ?option value ...? | Links the imports (-imports, -link, -wasi), runs the start function, and gives an instance handle.
-sub: call instance function ?-limit units? ?-raw? ?--? ?arg ...? | Calls an export and gives its result, a list of its results, or an empty string.
-sub: package fileName ?prefix? ?-wasi dict? | Loads a Tcl C package built for wasm32-wasi with libztclstubs.a and runs its init function.
-sub: run module|fileName ?option value ...? | Runs a WASI command (_start) and gives its exit code.
-sub: memory instance size|grow|read|write|string ?arg ...? | Reads, writes, and grows the linear memory of an instance.
-sub: global instance name ?value? | Reads or sets an exported global.
-sub: exports module|instance | A list of name, kind, and type for each export.
-sub: imports module | A list of module, name, kind, and type for each import.
-sub: info module | A dict of the counts and the features of a module.
-sub: delete handle ?handle ...? | Deletes modules and instances.
-sub: jit ?boolean? | Reads or sets the use of the JIT tier for the calls of the interpreter.
+syn: ztcl::wasm SUBCOMMAND ?ARG ...?
+sub: ztcl::wasm load FILENAME | Reads, decodes, and validates a module file, and gives a module handle.
+sub: ztcl::wasm new BYTES | Decodes and validates the bytes of a module, and gives a module handle.
+sub: ztcl::wasm instantiate MODULE ?-imports DICT? ?-link DICT? ?-wasi DICT? ?-command NAME? ?-limit UNITS? | Links the imports of a module, runs its start function, and gives an instance handle.
+sub: ztcl::wasm call INSTANCE FUNCTION ?-limit UNITS? ?-raw? ?--? ?ARG ...? | Calls an exported function and gives its result.
+sub: ztcl::wasm package FILENAME ?PREFIX? ?-wasi DICT? | Loads a Tcl C package built for wasm32-wasi and runs its init function.
+sub: ztcl::wasm run MODULE|FILENAME ?-args LIST? ?-env DICT? ?-dirs DICT? ?-stdin TEXT? ?-imports DICT? ?-limit UNITS? | Runs a WASI command and gives its exit code.
+sub: ztcl::wasm memory INSTANCE size | Reads, writes, and grows the linear memory of an instance.
+sub: ztcl::wasm memory INSTANCE grow PAGES | Reads, writes, and grows the linear memory of an instance.
+sub: ztcl::wasm memory INSTANCE read ADDRESS LENGTH | Reads, writes, and grows the linear memory of an instance.
+sub: ztcl::wasm memory INSTANCE write ADDRESS BYTES ?-text? | Reads, writes, and grows the linear memory of an instance.
+sub: ztcl::wasm memory INSTANCE string ADDRESS ?LENGTH? | Reads, writes, and grows the linear memory of an instance.
+sub: ztcl::wasm global INSTANCE NAME ?VALUE? | Reads or sets an exported global.
+sub: ztcl::wasm exports MODULE|INSTANCE | Gives the name, the kind, and the type of each export.
+sub: ztcl::wasm imports MODULE | Gives the module, the name, the kind, and the type of each import.
+sub: ztcl::wasm info MODULE | Gives a dict of the counts and the features of a module.
+sub: ztcl::wasm delete ?HANDLE ...? | Deletes modules and instances.
+sub: ztcl::wasm jit ?BOOLEAN? | Reads or sets the use of the JIT tier.
 == ztcl::probe
 syn: ztcl::probe subcommand ?arg ...?
 == ztcl::tls ztcl::tls::socket
