@@ -1929,7 +1929,9 @@ test "socket accepts only loopback addresses by default" {
 }
 
 test "a redirection of an isolated exec needs the file capability, also with a root" {
-    if (!tcl.proc.supported or @import("builtin").os.tag != .linux) return error.SkipZigTest;
+    // The vm capability needs the KVM monitor, which is x86-64 only
+    // (kvm.zig): on arm64, exec gives ZTCL EXEC NOVM before the check.
+    if (!tcl.proc.supported or @import("builtin").os.tag != .linux or @import("builtin").cpu.arch != .x86_64) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
