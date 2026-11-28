@@ -252,6 +252,10 @@ const darwin = struct {
     pub fn lseek(fd: i32, off: i64, whence: u8) usize {
         return ret(c.lseek(fd, off, whence));
     }
+
+    pub fn ftruncate(fd: i32, len: i64) usize {
+        return ret(c.ftruncate(fd, len));
+    }
 };
 
 const is_win = builtin.os.tag == .windows;
@@ -718,6 +722,17 @@ pub fn shutdown(fd: Fd, how: i32) void {
 }
 
 pub const SeekResult = union(enum) { at: i64, err: Errno };
+
+/// Sets the size of a file to `len` bytes. The position of the file
+/// stays. Gives `len`.
+pub fn truncate(fd: Fd, len: i64) SeekResult {
+    if (comptime is_win) return win.truncate(fd, len);
+    if (comptime is_wasi) return wasi.truncate(fd, len);
+    const rc = os.ftruncate(fd, len);
+    const e = os.errno(rc);
+    if (e != .SUCCESS) return .{ .err = e };
+    return .{ .at = len };
+}
 
 /// Moves the position of a file: `whence` is 0 for the start, 1 for
 /// the current position, and 2 for the end. Gives the new position.

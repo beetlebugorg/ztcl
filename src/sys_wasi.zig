@@ -132,6 +132,13 @@ pub fn seek(fd: i32, off: i64, whence: u8) sys.SeekResult {
     return .{ .at = @intCast(at) };
 }
 
+pub fn truncate(fd: i32, len: i64) sys.SeekResult {
+    if (len < 0) return .{ .err = .INVAL };
+    const e = wasi.fd_filestat_set_size(fd, @intCast(len));
+    if (e != .SUCCESS) return .{ .err = e };
+    return .{ .at = len };
+}
+
 const notsup: sys.Fail = .{ .name = "ENOTSUP", .text = "operation not supported" };
 
 pub fn listenAt(_: sys.Addr, _: bool) sys.SockResult {

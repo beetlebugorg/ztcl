@@ -17,8 +17,8 @@ command chan {
     }
     returns {The result of the subcommand.}
     see {open close gets read puts fconfigure {file channels}}
-    difference {`chan` has no `create`, `push`, `pop`, `postevent`, or `truncate`, and in Tcl 9.1 no `isbinary`. The message of an unknown subcommand does not list `blocked`, `event`, and `pending` ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
-    difference {In Tcl 9.0.4 the messages of a wrong count of arguments name the channel `channel` ([issue 692](https://github.com/beetlebugorg/ztcl/issues/692)).}
+    difference {`chan` has no `create`, `push`, `pop`, or `postevent`, so the message of an unknown subcommand does not list them ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
+    release {In Tcl 9.1 the messages of a wrong count of arguments name the channel `channel`, and in Tcl 8.6 `channelId`.}
     example {
         set f [open a.txt w]; chan puts $f hello; chan close $f
         set f [open a.txt]
@@ -27,7 +27,11 @@ command chan {
         set line
     } hello
     example {lsort [chan names std*]} {stderr stdin stdout}
-    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell} {TCL LOOKUP INDEX subcommand}
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 8.6
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, eof, event, flush, gets, isbinary, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 9.1
+    error {chan p} {unknown or ambiguous subcommand "p": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND p} -tcl 8.6
+    error {chan blocked} {wrong # args: should be "chan blocked channelId"} {TCL WRONGARGS} -tcl 8.6
+    error {chan blocked} {wrong # args: should be "chan blocked channel"} {TCL WRONGARGS} -tcl 9.1
     error {chan close nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
 
     subcommand puts {
@@ -58,7 +62,8 @@ command chan {
             chan close $f
             error [regsub {file\d+} $m fileN]
         } {channel "fileN" wasn't opened for writing} NONE -note {The example puts fileN in place of the name of the channel, since the name changes from run to run.}
-        error {chan puts} {wrong # args: should be "chan puts ?-nonewline? ?channelId? string"} {TCL WRONGARGS}
+        error {chan puts} {wrong # args: should be "chan puts ?-nonewline? ?channelId? string"} {TCL WRONGARGS} -tcl 8.6
+        error {chan puts} {wrong # args: should be "chan puts ?-nonewline? ?channel? string"} {TCL WRONGARGS} -tcl 9.1
         option -nonewline {
             type flag
             summary {Writes no newline after the string.}
@@ -238,6 +243,68 @@ command chan {
         error {chan tell nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
     }
 
+    subcommand truncate {
+        synopsis {chan truncate CHAN ?LENGTH?}
+        summary {Sets the size of a file of a channel.}
+        description {Writes the buffered output of CHAN, then sets the size of its file to LENGTH bytes, or to the current place of the channel. The place of the channel stays. A channel that is no file, such as a pipe, gives `EINVAL`.}
+        returns {An empty string.}
+        see {{chan seek} {chan tell} {file size}}
+        argument CHAN {
+            type channel
+            summary {A channel of a file open for writing.}
+        }
+        argument LENGTH {
+            type integer
+            optional
+            summary {The new size in bytes, 0 or more.}
+        }
+        example {
+            set f [open a.txt w]; chan puts -nonewline $f 0123456789
+            chan truncate $f 4
+            chan close $f
+            file size a.txt
+        } 4
+        example {
+            set f [open a.txt w]; chan puts -nonewline $f 0123456789; chan close $f
+            set f [open a.txt r+]
+            chan seek $f 2
+            chan truncate $f
+            chan close $f
+            file size a.txt
+        } 2
+        error {
+            set f [open a.txt w]
+            catch {chan truncate $f -1} m
+            chan close $f
+            error $m
+        } {cannot truncate to negative length of file} NONE
+        error {chan truncate nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
+        error {chan truncate} {wrong # args: should be "chan truncate channelId ?length?"} {TCL WRONGARGS} -tcl 8.6
+    }
+
+    subcommand isbinary {
+        synopsis {chan isbinary CHAN}
+        tcl 9.1
+        summary {Tests whether a channel passes its bytes with no change.}
+        description {Gives 1 when CHAN has the encoding `binary`, the translation `lf` for input and output, and no `-eofchar`, else 0. `fconfigure $f -translation binary` makes such a channel.}
+        returns {1 or 0.}
+        see {{chan configure}}
+        argument CHAN {
+            type channel
+            summary {The channel.}
+        }
+        example {
+            set f [open a.txt w]
+            set r [list [chan isbinary $f]]
+            chan configure $f -translation binary
+            lappend r [chan isbinary $f]
+            chan close $f
+            set r
+        } {0 1}
+        error {chan isbinary nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
+        error {chan isbinary} {wrong # args: should be "chan isbinary channel"} {TCL WRONGARGS}
+    }
+
     subcommand flush {
         synopsis {chan flush CHAN}
         summary {Writes the buffered output of a channel.}
@@ -290,7 +357,8 @@ command chan {
             chan close $f
             error $m
         } {bad direction "bogus": must be read or write} NONE
-        error {chan close} {wrong # args: should be "chan close channelId ?direction?"} {TCL WRONGARGS}
+        error {chan close} {wrong # args: should be "chan close channelId ?direction?"} {TCL WRONGARGS} -tcl 8.6
+        error {chan close} {wrong # args: should be "chan close channel ?direction?"} {TCL WRONGARGS} -tcl 9.1
     }
 
     subcommand names {

@@ -3921,3 +3921,37 @@ test "dict incr in a loop body at the top level writes the dict in place (#622)"
     try std.testing.expect(it.heap.allocatedBytes() - before < 20 << 20);
     try std.testing.expectEqualStrings("2000 x 2", try it.str(try it.eval("list [dict size $c] [dict get $c w5] [set r [foreach w {a a} { dict incr c $w }]; dict get $c a]")));
 }
+
+test "chan truncate, chan isbinary, and the messages of chan (#690, #692)" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    const linux = tcl.sys.os;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const rc = linux.openat(tmp.dir.handle, ".", .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
+    it.fs.fd = @intCast(rc);
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try std.testing.expectEqualStrings("4 2 6 2", try it.str(try it.eval(
+        \\set f [open t.txt w]; puts -nonewline $f 0123456789; chan truncate $f 4; close $f
+        \\set r [file size t.txt]
+        \\set f [open t.txt r+]; seek $f 2; chan truncate $f; lappend r [file size t.txt]
+        \\puts -nonewline $f abcd; chan tr $f; close $f; lappend r [file size t.txt]
+        \\set f [open t.txt r]; seek $f 2; set t [tell $f]; close $f; lappend r $t
+    )));
+    try std.testing.expectEqualStrings("{unknown or ambiguous subcommand \"bogus\": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus}", try it.str(try it.eval("catch {chan bogus} m o; list $m [dict get $o -errorcode]")));
+    try std.testing.expectEqualStrings("wrong # args: should be \"chan close channelId ?direction?\"", try it.str(try it.eval("catch {chan close} m; set m")));
+    try it.setTclVersion(.v9_1);
+    try std.testing.expectEqualStrings("0 1", try it.str(try it.eval("set f [open t.txt w]; set r [chan isbinary $f]; fconfigure $f -translation binary; lappend r [chan isbinary $f]; close $f; set r")));
+    for ([_][2][]const u8{
+        .{ "chan close", "wrong # args: should be \"chan close channel ?direction?\"" },
+        .{ "chan puts", "wrong # args: should be \"chan puts ?-nonewline? ?channel? string\"" },
+        .{ "chan blocked", "wrong # args: should be \"chan blocked channel\"" },
+        .{ "chan event stdin", "wrong # args: should be \"chan event channel event ?script?\"" },
+    }) |c| {
+        const script = try std.fmt.allocPrint(it.alloc(), "catch {{{s}}} m; set m", .{c[0]});
+        try std.testing.expectEqualStrings(c[1], try it.str(try it.eval(script)));
+    }
+}
