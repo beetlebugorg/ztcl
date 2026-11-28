@@ -9,7 +9,7 @@
 
 With no font, `ztcl::typeset justify` breaks the text on a grid of characters. Each line but the last of a paragraph fills the width, and the spaces of a line differ by one character at most:
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::typeset
 puts -nonewline [ztcl::typeset justify "The line breaker looks at the whole paragraph,\
@@ -38,7 +38,7 @@ On a narrow column with no hyphens, no set of breaks is good, and the two method
 
 To see the numbers, ask `break` for the ratio of each line. Here the text is on a grid of 34 characters, with no hyphens:
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::typeset
 set text "In olden times when wishing still helped one, there lived a king\
@@ -64,7 +64,7 @@ First fit fills the first two lines well, and then the third line has to stretch
 
 `ztcl::typeset hyphenate` gives the places where a word can break, from the patterns of Liang:
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::typeset
 foreach word {hyphenation typesetting algorithm paragraph} {
@@ -147,7 +147,7 @@ set svg [ztcl::typeset svg $text -width 400 -font $font -size 12 -family "Source
 
 `ztcl::typeset pages` places paragraphs in columns and pages. It gets the line count of each paragraph and keeps a first line or a last line from standing alone at the edge of a column:
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::typeset
 foreach page [ztcl::typeset pages {4 3 5} -lines 6 -columns 2] {

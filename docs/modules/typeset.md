@@ -7,7 +7,7 @@
 
 The module needs no capability. It reads no file: a script reads a font file and gives its bytes to `ztcl::typeset font load`. The work counts toward the compute limit: one unit for each 256 bytes of text, and one for each 64 steps of the line breaker. The guide [Typesetting in Tcl](../typesetting.md) shows the module at work, and [References](../references/typeset.md) lists the papers and the license of the patterns.
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::typeset
 puts [ztcl::typeset hyphenate typesetting]
