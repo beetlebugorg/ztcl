@@ -104,6 +104,7 @@ test "list commands of Tcl 9.1" {
         .{ "set l {{a b} c}; list [lpop l 0 1] $l", no86 ++ "lpop\"", "b {a c}" },
         .{ "set l {}; lpop l", no86 ++ "lpop\"", "!index \"end\" out of range" },
         .{ "set l {a b}; lpop l 5", no86 ++ "lpop\"", "!index \"5\" out of range" },
+        .{ "lpop", no86 ++ "lpop\"", "!wrong # args: should be \"lpop listvar ?index?\"" },
         .{ "lremove {a b c d} 1 end", no86 ++ "lremove\"", "a c" },
         .{ "lremove {a b c d} 0 0 2", no86 ++ "lremove\"", "b d" },
         .{ "set l {a b c d}; ledit l 1 2 X Y Z; set l", no86 ++ "ledit\"", "a X Y Z d" },
