@@ -40,6 +40,7 @@ pub const tcl9 = @import("tcl9.zig");
 pub const more = @import("more.zig");
 pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
+pub const fileattr = @import("fileattr.zig");
 pub const launch = @import("launch.zig");
 pub const winreg = @import("winreg.zig");
 pub const mac = @import("mac.zig");
@@ -142,6 +143,7 @@ test {
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
+    _ = @import("fileattr.zig");
     _ = @import("tcl9.zig");
     _ = @import("ucd.zig");
     _ = @import("math9.zig");
