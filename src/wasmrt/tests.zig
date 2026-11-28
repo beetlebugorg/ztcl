@@ -122,3 +122,7 @@ test "ztcl::wasm: capabilities" {
     try expect(wasi_setup ++ "ztcl::wasm run $c", "3");
     try expect(wasi_setup ++ "ztcl::wasm instantiate $c", "!missing import \"wasi_snapshot_preview1\" \"clock_time_get\"");
 }
+
+test {
+    _ = @import("cext.zig");
+}
