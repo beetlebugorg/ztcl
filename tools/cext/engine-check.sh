@@ -14,6 +14,9 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$here/../..
 tclsh=${TCLSH:-tclsh}
 zig=${ZIG:-zig}
+# tclsh takes its system encoding from the locale. A container with no
+# LANG gives iso8859-1, and the text of the checks is UTF-8.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
 # The C compiler of the native packages for tclsh: cc, or zig cc when
 # the host has no cc (the container of the self-hosted runner).
 if [ -n "${CC:-}" ]; then cc_cmd=$CC; elif command -v cc > /dev/null; then cc_cmd=cc; else cc_cmd="${ZIG:-zig} cc"; fi
