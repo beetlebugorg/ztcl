@@ -3908,6 +3908,26 @@ test "file copy and file rename to a file that exists give the message of tclsh"
     }
 }
 
+test "file separator, system, volumes, and tempfile check the count of their arguments" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".zig-cache");
+    const cases = [_][2][]const u8{
+        .{ "file separator a b", "wrong # args: should be \"file separator ?name?\"" },
+        .{ "file system a b c d", "wrong # args: should be \"file system name\"" },
+        .{ "file volumes a", "wrong # args: should be \"file volumes\"" },
+        .{ "file tempfile a b c", "wrong # args: should be \"file tempfile ?nameVar? ?template?\"" },
+    };
+    for (cases) |c| {
+        try std.testing.expectError(error.TclError, it.eval(c[0]));
+        try std.testing.expectEqualStrings(c[1], try it.str(it.result));
+        try std.testing.expectEqualStrings("TCL WRONGARGS", try it.str(it.error_code));
+    }
+    try std.testing.expectEqualStrings("/ /", try it.str(try it.eval("list [file separator] [file separator a]")));
+}
+
 test "a file writes the line end of the platform, and binary reads back as lf" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
