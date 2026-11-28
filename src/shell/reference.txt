@@ -85,6 +85,10 @@ syn: tcl_endOfWord str start
 syn: lappend VAR ?VALUE ...?
 == lassign
 syn: lassign LIST ?VAR ...?
+== ledit
+syn: ledit VAR FIRST LAST ?ELEMENT ...?
+== lfilter
+syn: lfilter VARLIST LIST ?VARLIST LIST ...? SCRIPT
 == lindex
 syn: lindex LIST ?INDEX ...?
 == linsert
@@ -93,8 +97,12 @@ syn: linsert LIST INDEX ?ELEMENT ...?
 syn: list ?ARG ...?
 == llength
 syn: llength LIST
+== lpop
+syn: lpop VAR ?INDEX ...?
 == lrange
 syn: lrange LIST FIRST LAST
+== lremove
+syn: lremove LIST ?INDEX ...?
 == lrepeat
 syn: lrepeat COUNT ?ELEMENT ...?
 == lreplace
@@ -122,6 +130,10 @@ opt: -decreasing | Says that a sorted list is in decreasing order.
 opt: -index INDEX | Compares an element of each element in place of the whole element.
 opt: -subindices | With -index, gives the path of the match or the subelement.
 opt: -stride N | Reads the list as groups of N elements.
+== lseq
+syn: lseq COUNT
+syn: lseq START ?to|..? END ??by? STEP?
+syn: lseq START count COUNT ??by? STEP?
 == lset
 syn: lset VAR ?INDEX ...? VALUE
 == lsort
@@ -138,18 +150,6 @@ opt: -unique | Keeps one element of each group of equal elements.
 opt: -indices | Gives the indexes of the elements in sorted order.
 opt: -index INDEX | Compares an element of each element in place of the whole element.
 opt: -stride N | Sorts groups of N elements.
-== lseq
-syn: lseq count
-syn: lseq start ?to|..? end ??by? step?
-syn: lseq start count count ??by? step?
-== lpop
-syn: lpop listVar ?index ...?
-== lremove
-syn: lremove list ?index ...?
-== ledit
-syn: ledit listVar first last ?element ...?
-== lfilter
-syn: lfilter varList list ?varList list ...? command
 == lmap
 syn: lmap varList list ?varList list ...? command
 == foreach
