@@ -324,6 +324,26 @@ syn: throw type message
 syn: catch script ?resultVarName? ?optionVarName?
 == try
 syn: try body ?handler ...? ?finally script?
+== chan
+syn: chan SUBCOMMAND ?ARG ...?
+sub: chan puts ?-nonewline? ?CHAN? STRING | Writes a string and a newline to a channel.
+sub: chan gets CHAN ?VAR? | Reads one line from a channel.
+sub: chan read ?-nonewline? CHAN | Reads the rest of a channel, or a count of characters.
+sub: chan read CHAN COUNT | Reads the rest of a channel, or a count of characters.
+sub: chan eof CHAN | Tests whether the last read reached the end of a channel.
+sub: chan seek CHAN OFFSET ?ORIGIN? | Moves the place of the next read or write of a channel.
+sub: chan tell CHAN | Gives the place of the next read or write of a channel.
+sub: chan flush CHAN | Writes the buffered output of a channel.
+sub: chan close CHAN ?DIRECTION? | Closes a channel, or one direction of it.
+sub: chan names ?PATTERN? | Gives the names of the open channels.
+sub: chan configure CHAN | Gives or sets the options of a channel.
+sub: chan configure CHAN OPTION | Gives or sets the options of a channel.
+sub: chan configure CHAN OPTION VALUE ?OPTION VALUE ...? | Gives or sets the options of a channel.
+sub: chan copy IN OUT ?-size SIZE? ?-command SCRIPT? | Copies the data of one channel to another.
+sub: chan pipe | Makes a pipe and gives its two channels.
+sub: chan pending MODE CHAN | Gives the count of bytes that wait in a buffer of a channel.
+sub: chan blocked CHAN | Tests whether the last read of a channel stopped for want of data.
+sub: chan event CHAN EVENT ?SCRIPT? | Gives or sets the script that the event loop runs when a channel can be read or written.
 == file
 syn: file SUBCOMMAND ?ARG ...?
 sub: file join NAME ?NAME ...? | Joins parts into one path.
@@ -392,20 +412,6 @@ opt: -queue | A serial port, read only: the counts of bytes in the input queue a
 syn: fblocked channelId
 == fcopy
 syn: fcopy input output ?-size size? ?-command callback?
-== chan
-syn: chan subcommand ?arg ...?
-sub: chan close CHAN ?DIRECTION? | As close.
-sub: chan configure CHAN ?-option value ...? | As fconfigure.
-sub: chan copy IN OUT ?-size N? ?-command CB? | As fcopy.
-sub: chan eof CHAN | As eof.
-sub: chan flush CHAN | As flush.
-sub: chan gets CHAN ?VAR? | As gets.
-sub: chan names ?PATTERN? | The names of the open channels.
-sub: chan pipe | Makes a pipe and gives two channels: the bytes that go into the second come out of the first.
-sub: chan puts ?-nonewline? ?CHAN? STRING | As puts.
-sub: chan read ?-nonewline? CHAN ?N? | As read.
-sub: chan seek CHAN OFFSET ?ORIGIN? | As seek.
-sub: chan tell CHAN | As tell.
 == source
 syn: source ?-encoding name? fileName
 == glob
