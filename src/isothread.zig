@@ -1255,6 +1255,7 @@ fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
     while (it.next()) |e| thread.replyFailed(g, e.value_ptr.from, e.value_ptr.seq);
     b.pending.deinit(a);
     if (b.real_root) |r| a.free(r);
+    if (b.unikernel) |p| a.free(p);
     if (b.meter) |m| {
         var c = b.child_counts;
         // The parent measures the time and the transport. The other
