@@ -294,6 +294,14 @@ syn: coroutine name cmd ?arg ...?
 syn: yield ?value?
 == yieldto
 syn: yieldto command ?arg ...?
+== coroinject
+syn: coroinject coroName cmd ?arg ...?
+== coroprobe
+syn: coroprobe coroName cmd ?arg ...?
+== tcl::unsupported::inject
+syn: tcl::unsupported::inject coroName cmd ?arg ...?
+== tcl::unsupported::corotype
+syn: tcl::unsupported::corotype coroName
 == walk
 syn: walk
 == error

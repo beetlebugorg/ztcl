@@ -22,7 +22,7 @@ compExpr.test	76	76
 compile.test	97	97
 concat.test	9	9
 config.test	0	0
-coroutine.test	45	45
+coroutine.test	52	52
 dcall.test	0	0
 dict.test	320	320
 dstring.test	0	0

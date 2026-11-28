@@ -71,6 +71,31 @@ ex: coroutine c apply {{} {set got [yield first]; return "got $got"}}; c hello =
 syn: yieldto command ?arg ...?
 does: Stops the coroutine and runs the command in the place of the caller. The arguments of the next call of the coroutine are the result of `yieldto`, as a list.
 
+== coroinject
+syn: coroinject coroName cmd ?arg ...?
+does: Puts a command in a suspended coroutine. At the next resume the command runs in the coroutine, with two more arguments: the name of the command that suspended it (`yield` or `yieldto`) and the value of the resume. Its result is the result of that `yield` or `yieldto`. A command put in later runs first, and its result is the value of the next one.
+tcl: 9.1
+ex: coroutine c apply {{} {return [yield]}}; coroinject c apply {{op v} {string toupper $v}}; c hi => HI
+err: coroinject nope set x | can only inject a command into a coroutine
+
+== coroprobe
+syn: coroprobe coroName cmd ?arg ...?
+does: Runs a command now in a suspended coroutine, in the place where it waits, and gives its result. The coroutine stays suspended, and the next resume goes on as before.
+tcl: 9.1
+ex: coroutine c apply {{} {set n 5; yield; return $n}}; coroprobe c set n => 5
+err: coroprobe nope set x | can only inject a probe command into a coroutine
+
+== tcl::unsupported::inject
+syn: tcl::unsupported::inject coroName cmd ?arg ...?
+does: Puts a command in a suspended coroutine. At the next resume the command runs in the coroutine with its own words only, and the coroutine goes on. The form of Tcl 8.6 of `coroinject`.
+ex: coroutine c apply {{} {yield; return $::x}}; set x 1; tcl::unsupported::inject c set ::x 2; c => 2
+
+== tcl::unsupported::corotype
+syn: tcl::unsupported::corotype coroName
+does: How a coroutine waits: `yield` or `yieldto`, or `active` while it runs.
+ex: coroutine c apply {{} {yield}}; tcl::unsupported::corotype c => yield
+err: tcl::unsupported::corotype nope | can only get coroutine type of a coroutine
+
 == walk
 syn: walk
 does: A command of the runner of ztcl for its own tests.
