@@ -629,6 +629,14 @@ opt: -- | Ends the options.
 syn: pid ?fileId?
 == exit
 syn: exit ?returnCode?
+== ztcl::agent
+syn: ztcl::agent SUBCOMMAND ?ARG ...?
+sub: ztcl::agent run ?-option value ...? | Runs the loop of the model and gives a dict of the result, the log, and the counts.
+sub: ztcl::agent doc NAME TEXT ?ARG TYPE ...? | Sets the text of a tool and the types of its arguments.
+sub: ztcl::agent describe NAME | Gives the spec of a command as a tool.
+sub: ztcl::agent check SCHEMA VALUE | Gives a value when it matches a result schema.
+sub: ztcl::agent schema SCHEMA | Gives the JSON schema of a result schema.
+sub: ztcl::agent post URL HEADERS BODY | Sends one HTTP/1.1 POST of a JSON body.
 == ztcl::gc
 syn: ztcl::gc SUBCOMMAND
 sub: ztcl::gc stats | Gives a dict of the counts of the collector.
@@ -736,14 +744,6 @@ sub: ztcl::watch add ?-recursive? PATH | Starts a watch of a folder and gives it
 sub: ztcl::watch changes WATCHER | Gives the events that wait, as a list of pairs of a kind and a path.
 sub: ztcl::watch fd WATCHER | Gives the descriptor that an embedder can wait on.
 sub: ztcl::watch remove WATCHER | Stops a watch.
-== ztcl::agent
-syn: ztcl::agent subcommand ?arg ...?
-sub: ztcl::agent run ?-option value ...? | Runs the loop.
-sub: ztcl::agent doc NAME TEXT ?ARG TYPE ...? | Sets the text of the tool NAME and the types of its arguments.
-sub: ztcl::agent describe NAME | The spec of the command NAME as a tool: name, text, JSON schema, and parameters.
-sub: ztcl::agent check SCHEMA VALUE | VALUE when it matches the result schema SCHEMA, else the error ZTCL AGENT RESULT.
-sub: ztcl::agent schema SCHEMA | The JSON schema of a result schema.
-sub: ztcl::agent post URL HEADERS BODY | One HTTP/1.1 POST of a JSON body.
 == ztcl::pdf
 syn: ztcl::pdf subcommand ?arg ...?
 sub: create ?-compress bool? | Makes a document and gives its handle.
