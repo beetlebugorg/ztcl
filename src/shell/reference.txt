@@ -81,6 +81,8 @@ sub: binary encode FORMAT ?-option value ...? DATA | base64, hex, or uuencode te
 sub: binary decode FORMAT ?-option value ...? DATA | The bytes of the text.
 == tcl_endOfWord tcl_startOfNextWord tcl_startOfPreviousWord tcl_wordBreakAfter tcl_wordBreakBefore
 syn: tcl_endOfWord str start
+== foreach
+syn: foreach VARLIST LIST ?VARLIST LIST ...? BODY
 == lappend
 syn: lappend VAR ?VALUE ...?
 == lassign
@@ -97,6 +99,8 @@ syn: linsert LIST INDEX ?ELEMENT ...?
 syn: list ?ARG ...?
 == llength
 syn: llength LIST
+== lmap
+syn: lmap VARLIST LIST ?VARLIST LIST ...? BODY
 == lpop
 syn: lpop VAR ?INDEX ...?
 == lrange
@@ -150,10 +154,6 @@ opt: -unique | Keeps one element of each group of equal elements.
 opt: -indices | Gives the indexes of the elements in sorted order.
 opt: -index INDEX | Compares an element of each element in place of the whole element.
 opt: -stride N | Sorts groups of N elements.
-== lmap
-syn: lmap varList list ?varList list ...? command
-== foreach
-syn: foreach varList list ?varList list ...? command
 == dict
 syn: dict SUBCOMMAND ?ARG ...?
 sub: dict create ?KEY VALUE ...? | Makes a dict from keys and values.
