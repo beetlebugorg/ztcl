@@ -541,6 +541,9 @@ test "try, throw, and the error code" {
         .{ "try {set a 1} on ok {v} {list ok $v} finally {set b 2}", "ok 1" },
         .{ "try {error a} on error {} - on break {} {list both}", "both" },
         .{ "proc p {} {try {return 7} finally {set z 1}}; p", "7" },
+        // A catch in finally keeps the error state of a return in a handler.
+        .{ "proc p {} {try {error boom} on error {m o} {return -code error -errorcode {A B} x} finally {catch {error z}}}; catch p m o; dict get $o -errorcode", "A B" },
+        .{ "proc p {} {try {error boom} on error {m o} {return -code error -errorinfo I x} finally {catch {error z}}}; catch p m o; string range [dict get $o -errorinfo] 0 0", "I" },
         .{ "catch {throw {MY CODE} msg}; set errorCode", "MY CODE" },
         .{ "catch {error msg info {E 1}} m o; dict get $o -errorcode", "E 1" },
         .{ "catch {return -code error -errorcode {Q 2} m} m o; set o", "-errorcode {Q 2} -code 1 -level 1" },
