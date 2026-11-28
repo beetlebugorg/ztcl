@@ -39,42 +39,6 @@ does: Runs the command once for each element, as `foreach` does, and gives the v
 tcl: 9.1
 ex: lfilter x {1 2 3 4} {expr {$x % 2 == 0}} => 2 4
 
-== lsearch
-syn: lsearch ?-option value ...? list pattern
-does: Finds an element. It gives the index of the first match, or -1. The default match is a glob pattern.
-opt: -exact | The element equals the pattern.
-opt: -glob | A glob pattern (the default).
-opt: -regexp | A regular expression.
-opt: -all | Gives each index that matches.
-opt: -inline | Gives the elements in place of the indexes.
-opt: -not | Finds the elements that do not match.
-opt: -nocase | Matches letters with no case.
-opt: -index INDEX | Compares element INDEX of each element.
-opt: -sorted | The list is sorted, and the search is a binary search.
-opt: -start INDEX | Starts at INDEX.
-opt: -stride N | Tcl 9.1 only: the list is groups of N elements. The search compares the first element of each group, or the element of -index in the group, and gives the index of the group. With -inline it gives the group.
-ex: lsearch {a b c} c => 2
-ex: lsearch -all -inline {apple box ant} a* => apple ant
-ex: lsearch -index 0 {{x 1} {y 2}} y => 1
-
-== lsort
-syn: lsort ?-option value ...? list
-does: A sorted copy of a list. The default order compares the text of the elements. The sort is stable: equal elements keep their order.
-opt: -ascii | Compares the text (the default).
-opt: -dictionary | Compares the text with no case, and runs of digits as numbers: `a2` before `a10`.
-opt: -integer | Compares integers.
-opt: -real | Compares floats.
-opt: -command CMD | Calls CMD with two elements. It gives a negative, zero, or positive integer.
-opt: -increasing | The smallest first (the default).
-opt: -decreasing | The largest first.
-opt: -index INDEX | Compares element INDEX of each element.
-opt: -unique | Keeps one of each run of equal elements.
-opt: -nocase | Compares letters with no case.
-ex: lsort {pear apple fig} => apple fig pear
-ex: lsort -integer {10 9 100} => 9 10 100
-ex: lsort -dictionary {a10 a2 A1} => A1 a2 a10
-ex: lsort -index 1 -decreasing {{a 1} {b 3} {c 2}} => {b 3} {c 2} {a 1}
-
 == lmap
 syn: lmap varList list ?varList list ...? command
 does: Runs the command for each element, as `foreach` does, and gives a list of the results. A `continue` leaves out that element.

@@ -1055,7 +1055,11 @@ proc refdoc::convert {runner name {remove 0}} {
     dict for {k vals} $e {
         if {$k in {name file line area}} continue
         foreach val $vals {
-            if {$k in {sub opt err}} {
+            if {$k eq "opt"} {
+                # The flag and the placeholder of its value are two words.
+                lassign [split_sub $val] flag text
+                set parts [list {*}[split $flag] $text]
+            } elseif {$k in {sub err}} {
                 set parts [split_sub $val]
             } elseif {$k eq "ex"} {
                 regexp {^(.*?) =>(?: (.*))?$} $val -> c r
