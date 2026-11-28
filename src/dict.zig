@@ -838,7 +838,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                 it.compute_limit -= 1;
                 try it.setVar(try it.str(names[0]), items[i]);
                 try it.setVar(try it.str(names[1]), items[i + 1]);
-                _ = it.evalScript(body) catch |e| switch (e) {
+                it.evalDropped(body) catch |e| switch (e) {
                     error.TclBreak => break,
                     error.TclContinue => continue,
                     else => return cmds.bodyContext(it, e, cmd, 4, true, "(\"dict for\" body line {d})"),

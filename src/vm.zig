@@ -191,6 +191,9 @@ pub const Code = struct {
     /// A body of the top level of the program of the debugger, with a
     /// `probe` instruction at each line (`probe.topBase`).
     probe_top: bool = false,
+    /// The code of the same script for a caller that drops its result,
+    /// such as the body of a loop (`compileDropped`).
+    dropped: ?*Code = null,
 };
 
 // ---- The guard ----
@@ -1431,6 +1434,18 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
 
 /// Compiles a script that runs in any frame. Its variables use names.
 pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
+    return compileNamedAs(it, s, false);
+}
+
+/// `compileNamed` for a caller that drops the result of the script. The
+/// last command then drops its result too, so a `dict` or `lset` on a
+/// variable can keep the ownership of its value and write it in place,
+/// as in the loop of a proc body. The result of the code is empty.
+pub fn compileDropped(it: *Interp, s: *interp.Script) Error!*Code {
+    return compileNamedAs(it, s, true);
+}
+
+fn compileNamedAs(it: *Interp, s: *interp.Script, drop: bool) Error!*Code {
     const a = it.alloc();
     var c: Compiler = .{ .it = it, .a = a, .named = true };
     // A script of a proc body with probes gets the probes of its lines.
@@ -1452,7 +1467,12 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
         c.line_base = b;
         c.outer_line = b;
     }
-    try c.compileScript(s);
+    if (drop) {
+        try c.compileScriptAs(s, .pop);
+        try c.emitPop();
+        _ = try c.emit(.{ .op = .push_empty });
+        c.push(1);
+    } else try c.compileScript(s);
     _ = try c.emit(.{ .op = .ret });
     try c.finish();
     const hints = try a.alloc(u32, c.names.items.len);
