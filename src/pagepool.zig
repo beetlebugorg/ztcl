@@ -284,7 +284,9 @@ const releaser = struct {
     }
 
     fn later(base: usize, n: usize) void {
-        if (builtin.single_threaded) return os.release(base, n);
+        // A target with no pool (`supported`) compiles no thread here: wasm32
+        // with shared memory has threads, and no std.Thread or futex.
+        if (comptime builtin.single_threaded or !supported) return os.release(base, n);
         grab();
         if (!started) {
             const t = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, run, .{}) catch {
