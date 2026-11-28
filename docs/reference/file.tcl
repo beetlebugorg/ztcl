@@ -13,13 +13,12 @@ command file {
 
         A new interpreter has no `file`: the host turns on the capability `file`. In the root folder of the interpreter (`ztcl --root DIR`, or an embedder with `fsroot.setRoot`), each path is inside that folder: `/` is the root folder, a relative path starts at the working folder, and a path that leaves the root folder is an error. The `ztcl` program uses the paths of the host by default, as tclsh does.
 
-        The separator of a path is `/`. A unique prefix of a subcommand is the subcommand. The examples of this page run in an empty root folder.
+        The separator of a path is `/` in the root folder and on Linux and macOS. In host mode on Windows, `separator` gives `\`, `nativename` gives the path with `\`, `volumes` gives the drives, and `system` gives the type of the volume, as tclsh does. A unique prefix of a subcommand is the subcommand. The examples of this page run in an empty root folder.
     }
     returns {The result of the subcommand.}
     see {open glob cd pwd {file channels} chan}
     difference {Links, the attributes of a file, and a new time with `atime` and `mtime` are errors in ztcl ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
     difference {Tcl 9.0.4 has `file home`, `file tempdir`, and `file tildeexpand`, and ztcl has none of them ([issue 685](https://github.com/beetlebugorg/ztcl/issues/685)).}
-    difference {In host mode on Windows, `pathtype`, `nativename`, `separator`, `volumes`, and `system` give the answers of the root folder ([issue 686](https://github.com/beetlebugorg/ztcl/issues/686)).}
     difference {Many errors have `-errorcode NONE` or a shorter code, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL WRONGARGS` or `TCL LOOKUP SUBCOMMAND` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     example {file join notes 2026 a.json} notes/2026/a.json
     example {file extension notes.json} .json
@@ -133,7 +132,7 @@ command file {
     subcommand pathtype {
         synopsis {file pathtype NAME}
         summary {Gives the kind of a path: absolute, relative, or volumerelative.}
-        description {Gives `absolute` for a path that starts with `/`, and `relative` for the others. A `~` has no meaning: `~` is relative. In host mode on Windows the answers differ from tclsh ([issue 686](https://github.com/beetlebugorg/ztcl/issues/686)).}
+        description {Gives `absolute` for a path that starts with `/`, and `relative` for the others. A `~` has no meaning: `~` is relative. In host mode on Windows, a path with a drive such as `C:/a` is `absolute`, and `/a` is `volumerelative`, as in tclsh.}
         returns {absolute, relative, or volumerelative.}
         see {{file normalize} {file join}}
         difference {Tcl 8.6.16 gives `absolute` for `file pathtype ~`, since it expands `~` to the home folder ([issue 684](https://github.com/beetlebugorg/ztcl/issues/684)).}
@@ -166,7 +165,7 @@ command file {
     subcommand nativename {
         synopsis {file nativename NAME}
         summary {Gives a path in the form of the platform.}
-        description {Gives NAME with the separator of the platform. In the root folder the separator is `/` on each platform, so NAME stays as it is.}
+        description {Gives NAME with the separator of the platform. In the root folder and on Linux and macOS the separator is `/`, so NAME stays as it is. In host mode on Windows, `C:/a/b` gives `C:\a\b`.}
         returns {The path.}
         see {{file separator}}
         argument NAME {
@@ -180,10 +179,10 @@ command file {
     subcommand separator {
         synopsis {file separator ?NAME?}
         summary {Gives the separator of paths.}
-        description {Gives `/`, the separator of paths in ztcl. With NAME it gives the separator of the file system of NAME: `/` too.}
+        description {Gives the separator of paths: `\` in host mode on Windows, and `/` in the root folder and on Linux and macOS. With NAME it gives the same separator.}
         returns {The separator.}
         see {{file nativename} {file join}}
-        difference {Tcl 8.6.16 and 9.0.4 give `\` on Windows, and an error for more than one argument ([issue 686](https://github.com/beetlebugorg/ztcl/issues/686), [issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
+        difference {Tcl 8.6.16 and 9.0.4 give an error for more than one argument ([issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
         argument NAME {
             type path
             optional
@@ -191,7 +190,7 @@ command file {
         }
         example {file separator} /
         example {file separator a/b} /
-        noerrors {Each call gives `/`. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        noerrors {Each call gives the separator. ztcl does not check the count of arguments of this subcommand (issue 688).}
     }
 
     subcommand mkdir {
@@ -741,26 +740,25 @@ command file {
     subcommand system {
         synopsis {file system NAME}
         summary {Gives the file system of a path.}
-        description {Gives a list of the kind of the file system and its name. In ztcl it is `native root` for each path.}
+        description {Gives a list of the kind of the file system and its name. In the root folder it is `native root` for each path. In host mode on Windows the name is the type of the volume, such as `native NTFS`.}
         returns {A list of two words.}
         see {{file volumes}}
-        difference {Tcl 8.6.16 and 9.0.4 give the type of the volume, such as `native NTFS`, and an error for more than one argument ([issue 686](https://github.com/beetlebugorg/ztcl/issues/686), [issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
+        difference {Tcl 8.6.16 and 9.0.4 give an error for more than one argument ([issue 688](https://github.com/beetlebugorg/ztcl/issues/688)).}
         argument NAME {
             type path
             summary {The path.}
         }
         example {file system n.txt} {native root}
-        noerrors {Each path gives `native root`. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        noerrors {Each path gives a list of two words. ztcl does not check the count of arguments of this subcommand (issue 688).}
     }
 
     subcommand volumes {
         synopsis {file volumes}
         summary {Gives the volumes of the file system.}
-        description {Gives the list of the volumes. In ztcl it is `/`.}
+        description {Gives the list of the volumes: the drives, such as `C:/ D:/`, in host mode on Windows, and `/` in the root folder and on Linux and macOS.}
         returns {A list of volumes.}
         see {{file system}}
-        difference {Tcl 8.6.16 and 9.0.4 give the drives on Windows, such as `C:/` ([issue 686](https://github.com/beetlebugorg/ztcl/issues/686)).}
         example {file volumes} /
-        noerrors {Each call gives `/`. ztcl does not check the count of arguments of this subcommand (issue 688).}
+        noerrors {Each call gives a list. ztcl does not check the count of arguments of this subcommand (issue 688).}
     }
 }
