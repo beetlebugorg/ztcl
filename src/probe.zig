@@ -1088,8 +1088,11 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs(usage);
     const sub = try it.str(argv[1]);
     const Sub = enum { add, configure, clear, list, records, remove };
-    const k = std.meta.stringToEnum(Sub, sub) orelse
-        return it.failCode("TCL LOOKUP SUBCOMMAND", "unknown subcommand \"{s}\": must be add, clear, configure, list, records, or remove", .{sub});
+    const k = std.meta.stringToEnum(Sub, sub) orelse {
+        it.result = .{ .str = try std.fmt.allocPrint(it.alloc(), "unknown subcommand \"{s}\": must be add, clear, configure, list, records, or remove", .{sub}) };
+        it.error_code = try value.newList(it.alloc(), &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "SUBCOMMAND" }, .{ .str = sub } });
+        return error.TclError;
+    };
     return switch (k) {
         .add => cmdAdd(it, argv[2..]),
         .remove => cmdRemove(it, argv[2..]),
@@ -1104,20 +1107,47 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
     };
 }
 
+/// An error of a value of an option: `TCL VALUE`.
+fn badValue(it: *Interp, comptime fmt: []const u8, args: anytype) Error {
+    return it.failCode("TCL VALUE", fmt, args);
+}
+
+/// An unknown option: `TCL LOOKUP INDEX option`.
+fn badOption(it: *Interp, comptime fmt: []const u8, args: anytype) Error {
+    return it.failCode("TCL LOOKUP INDEX option", fmt, args);
+}
+
 fn count(it: *Interp, v: Value, what: []const u8) Error!u64 {
+    return countFrom(it, v, what, 0);
+}
+
+fn countFrom(it: *Interp, v: Value, what: []const u8, least: i64) Error!u64 {
     const n = try it.int(v);
-    if (n < 0) return it.fail("{s} must be 0 or more", .{what});
+    if (n < least) return badValue(it, "{s} must be {d} or more", .{ what, least });
     return @intCast(n);
 }
+
+fn isOneOf(s: []const u8, comptime names: []const []const u8) bool {
+    inline for (names) |n| if (std.mem.eql(u8, s, n)) return true;
+    return false;
+}
+
+const add_options = "must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var";
+const records_options = "must be -first, -json, -last, -probe, -since, or -where";
 
 fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
     var spec: Spec = .{ .kind = .@"error" };
     var have = false;
     var have_line = false;
     var ops_set = false;
+    var targets: usize = 0;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const opt = try it.str(args[i]);
+        if (isOneOf(opt, &.{ "-error", "-proc", "-command", "-var" })) {
+            targets += 1;
+            if (targets > 1) return badValue(it, "a probe has one target: -proc, -command, -var, or -error", .{});
+        }
         if (std.mem.eql(u8, opt, "-error")) {
             spec.kind = .@"error";
             have = true;
@@ -1136,7 +1166,9 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
             spec.leave = true;
             continue;
         }
-        if (i + 1 >= args.len) return it.fail("option \"{s}\" needs a value", .{opt});
+        if (!isOneOf(opt, &.{ "-proc", "-line", "-command", "-var", "-ops", "-if", "-capture", "-count", "-every", "-rate" }))
+            return badOption(it, "bad option \"{s}\": " ++ add_options, .{opt});
+        if (i + 1 >= args.len) return badValue(it, "option \"{s}\" needs a value", .{opt});
         const v = args[i + 1];
         i += 1;
         if (std.mem.eql(u8, opt, "-proc")) {
@@ -1144,7 +1176,7 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
             spec.target = try it.str(v);
             have = true;
         } else if (std.mem.eql(u8, opt, "-line")) {
-            spec.line = @intCast(try count(it, v, "-line"));
+            spec.line = @intCast(try countFrom(it, v, "-line", 1));
             have_line = true;
             if (spec.kind == .proc) spec.kind = .line;
         } else if (std.mem.eql(u8, opt, "-command")) {
@@ -1160,7 +1192,7 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
             ops_set = true;
             for (try it.list(v)) |w| {
                 const t = try it.str(w);
-                if (std.mem.eql(u8, t, "read")) spec.ops |= trace.op_read else if (std.mem.eql(u8, t, "write")) spec.ops |= trace.op_write else if (std.mem.eql(u8, t, "unset")) spec.ops |= trace.op_unset else return it.fail("bad operation \"{s}\": must be read, unset, or write", .{t});
+                if (std.mem.eql(u8, t, "read")) spec.ops |= trace.op_read else if (std.mem.eql(u8, t, "write")) spec.ops |= trace.op_write else if (std.mem.eql(u8, t, "unset")) spec.ops |= trace.op_unset else return it.failCode("TCL LOOKUP INDEX operation", "bad operation \"{s}\": must be read, unset, or write", .{t});
             }
         } else if (std.mem.eql(u8, opt, "-if")) {
             spec.cond = try it.str(v);
@@ -1169,18 +1201,18 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
         } else if (std.mem.eql(u8, opt, "-count")) {
             spec.count = try count(it, v, "-count");
         } else if (std.mem.eql(u8, opt, "-every")) {
-            spec.every = try count(it, v, "-every");
+            spec.every = try countFrom(it, v, "-every", 1);
         } else if (std.mem.eql(u8, opt, "-rate")) {
             const w = try it.list(v);
-            if (w.len != 2) return it.fail("-rate needs a list of two numbers: records and compute units", .{});
+            if (w.len != 2) return badValue(it, "-rate needs a list of two numbers: records and compute units", .{});
             spec.rate_n = try count(it, w[0], "-rate");
             spec.rate_units = try count(it, w[1], "-rate");
-        } else return it.fail("bad option \"{s}\": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var", .{opt});
+        } else unreachable;
     }
     if (!have) return it.wrongArgs("ztcl::probe add -proc name ?-line n? | -command name | -var name | -error ?option value ...?");
-    if (have_line and spec.kind != .line) return it.fail("-line needs -proc", .{});
-    if (ops_set and spec.kind != .variable) return it.fail("-ops needs -var", .{});
-    if (spec.leave and spec.kind != .command) return it.fail("-leave needs -command", .{});
+    if (have_line and spec.kind != .line) return badValue(it, "-line needs -proc", .{});
+    if (ops_set and spec.kind != .variable) return badValue(it, "-ops needs -var", .{});
+    if (spec.leave and spec.kind != .command) return badValue(it, "-leave needs -command", .{});
     if (spec.kind == .variable and !std.mem.startsWith(u8, spec.target, "::")) {
         // A probe outlives the frame of the caller, so a local name is
         // not allowed. The full name finds the same cell from each frame.
@@ -1197,7 +1229,7 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
 fn parseId(it: *Interp, v: Value) Error!u32 {
     const t = try it.str(v);
     const digits = if (t.len > 1 and t[0] == 'p') t[1..] else t;
-    return std.fmt.parseInt(u32, digits, 10) catch it.fail("bad probe id \"{s}\"", .{t});
+    return std.fmt.parseInt(u32, digits, 10) catch it.failCode("ZTCL PROBE ID", "bad probe id \"{s}\"", .{t});
 }
 
 fn cmdRemove(it: *Interp, args: []const Value) Error!Value {
@@ -1208,7 +1240,7 @@ fn cmdRemove(it: *Interp, args: []const Value) Error!Value {
         return Value.empty;
     }
     const id = try parseId(it, args[0]);
-    if (!remove(it, id)) return it.fail("no probe \"{s}\"", .{try it.str(args[0])});
+    if (!remove(it, id)) return it.failCode("ZTCL PROBE ID", "no probe \"{s}\"", .{try it.str(args[0])});
     return Value.empty;
 }
 
@@ -1248,7 +1280,9 @@ fn cmdRecords(it: *Interp, args: []const Value) Error!Value {
             json = true;
             continue;
         }
-        if (i + 1 >= args.len) return it.fail("option \"{s}\" needs a value", .{opt});
+        if (!isOneOf(opt, &.{ "-probe", "-since", "-last", "-first", "-where" }))
+            return badOption(it, "bad option \"{s}\": " ++ records_options, .{opt});
+        if (i + 1 >= args.len) return badValue(it, "option \"{s}\" needs a value", .{opt});
         const v = args[i + 1];
         i += 1;
         if (std.mem.eql(u8, opt, "-probe")) {
@@ -1261,7 +1295,7 @@ fn cmdRecords(it: *Interp, args: []const Value) Error!Value {
             q.first = @intCast(try count(it, v, "-first"));
         } else if (std.mem.eql(u8, opt, "-where")) {
             q.where = try expr.compile(it, try whereText(it, try it.str(v)));
-        } else return it.fail("bad option \"{s}\": must be -first, -json, -last, -probe, -since, or -where", .{opt});
+        } else unreachable;
     }
     const rs = try select(it, q);
     const a = it.alloc();
@@ -1295,15 +1329,15 @@ fn cmdConfigure(it: *Interp, args: []const Value) Error!Value {
         const opt = try it.str(args[i]);
         const n = try count(it, args[i + 1], opt);
         if (std.mem.eql(u8, opt, "-size")) {
-            if (n > 1_000_000) return it.fail("-size must be at most 1000000", .{});
+            if (n > 1_000_000) return badValue(it, "-size must be at most 1000000", .{});
             try setSize(s, @intCast(n));
         } else if (std.mem.eql(u8, opt, "-budget")) {
-            if (n == 0) return it.fail("-budget must be 1 or more", .{});
+            if (n == 0) return badValue(it, "-budget must be 1 or more", .{});
             s.budget = n;
         } else if (std.mem.eql(u8, opt, "-maxlen")) {
-            if (n < 16) return it.fail("-maxlen must be 16 or more", .{});
+            if (n < 16) return badValue(it, "-maxlen must be 16 or more", .{});
             s.maxlen = @intCast(n);
-        } else return it.fail("bad option \"{s}\": must be -budget, -maxlen, or -size", .{opt});
+        } else return badOption(it, "bad option \"{s}\": must be -budget, -maxlen, or -size", .{opt});
     }
     return Value.empty;
 }
