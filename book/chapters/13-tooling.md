@@ -66,14 +66,14 @@ $ ztcl --no-jit sum.tcl        # in the interpreter only
 49999995000000
 ```
 
-The Tcl level of ztcl is 8.6.16. A script can read it with `info patchlevel`, as in tclsh:
+ztcl follows Tcl 9.1 by default, and Tcl 8.6.16 with `--tcl 8.6`. A script can read the level with `info patchlevel`, as in tclsh:
 
 ```tcl run
 puts "Tcl [info patchlevel], version [info tclversion]"
 ```
 
 ```output
-Tcl 8.6.16, version 8.6
+Tcl 9.1.0, version 9.1
 ```
 
 Run `ztcl` with no file to start the interactive shell.{^shell} The shell has a line editor, a history, and the completion of command names. Type `exit`, or press Ctrl-D on an empty line, to leave it.
