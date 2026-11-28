@@ -66,8 +66,15 @@
 
 const std = @import("std");
 
-/// libghostty-vt logs to stderr. The runner drops the log.
-pub const std_options: std.Options = .{ .logFn = @import("ztcl").vt.noLog };
+/// libghostty-vt logs to stderr. The runner drops the log, but the
+/// report of the leak check of a Debug build (scope SafeAllocator) goes
+/// to stderr: a test of the sandbox reads it from the log of the child.
+pub const std_options: std.Options = .{ .logFn = runnerLog };
+
+fn runnerLog(comptime level: std.log.Level, comptime scope: @EnumLiteral(), comptime format: []const u8, args: anytype) void {
+    if (comptime scope == .SafeAllocator) return std.log.defaultLog(level, scope, format, args);
+    @import("ztcl").vt.noLog(level, scope, format, args);
+}
 const builtin = @import("builtin");
 const Io = std.Io;
 const tcl = @import("ztcl");
