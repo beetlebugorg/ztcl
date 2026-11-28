@@ -1,11 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::probe
-syn: ztcl::probe subcommand ?arg ...?
-does: Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script, and gives the records back as dicts or JSON.
-page: modules/probe.md
-
 == ztcl::tls
 syn: ztcl::tls socket ?-servername name? ?-alpn protocols? ?-cadata pem? ?-verify boolean? host port
 does: A TLS 1.3 client: connects to `host` on `port`, runs the handshake, checks the certificate chain and the host name, and gives a channel. Load it with `package require ztcl::tls`.
