@@ -60,8 +60,7 @@ command foreach {
         set x
     } 2
     example {foreach x {1 2} {set x}} {} -note {The result is empty, whatever BODY gives.}
-    error {foreach {} {1} {}} {foreach varlist is empty} NONE
+    error {foreach {} {1} {}} {foreach varlist is empty} {TCL OPERATION FOREACH NEEDVARS}
     error {foreach x {1 2} {error boom}} boom NONE
     error {foreach x {1}} {wrong # args: should be "foreach varList list ?varList list ...? command"} {TCL WRONGARGS}
-    difference {An empty VARLIST has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL OPERATION FOREACH NEEDVARS` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
 }

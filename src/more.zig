@@ -294,14 +294,14 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (oi + 1 >= last) return it.fail("\"-stride\" option must be followed by stride length", .{});
             oi += 1;
             const n = try it.int(argv[oi]);
-            if (n < 2) return it.fail("stride length must be at least 2", .{});
+            if (n < 2) return it.failCode("TCL OPERATION LSORT BADSTRIDE", "stride length must be at least 2", .{});
             stride = @intCast(n);
             has_stride = true;
-        } else return it.fail("bad option \"{s}\": must be -ascii, -command, -decreasing, -dictionary, -increasing, -index, -indices, -integer, -nocase, -real, -stride, or -unique", .{s});
+        } else return it.failWords(&.{ "TCL", "LOOKUP", "INDEX", "option", s }, "bad option \"{s}\": must be -ascii, -command, -decreasing, -dictionary, -increasing, -index, -indices, -integer, -nocase, -real, -stride, or -unique", .{s});
     }
     const items = try it.list(argv[last]);
     if (has_stride) {
-        if (items.len % stride != 0) return it.fail("list size must be a multiple of the stride length", .{});
+        if (items.len % stride != 0) return it.failCode("TCL OPERATION LSORT BADSTRIDE", "list size must be a multiple of the stride length", .{});
         // The first index selects the element of the group.
         if (idx.len > 0) {
             const n = try cmds.index(it, idx[0], stride);
@@ -322,14 +322,14 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         for (path) |ix| {
             const sub = try it.list(kv);
             const n = try cmds.index(it, ix, sub.len);
-            if (n < 0 or n >= sub.len) return it.fail("element {d} missing from sublist \"{s}\"", .{ n, try it.str(kv) });
+            if (n < 0 or n >= sub.len) return it.failCode("TCL OPERATION LSORT INDEXFAILED", "element {d} missing from sublist \"{s}\"", .{ n, try it.str(kv) });
             kv = sub[@intCast(n)];
         }
         k.* = .{ .pos = g, .v = kv };
         switch (ctx.mode) {
             .ascii, .nocase, .dictionary => k.s = try it.str(kv),
             .integer => k.i = try it.int(kv),
-            .real => k.f = switch (kv.asNumber() orelse return it.fail("expected floating-point number but got \"{s}\"", .{try it.str(kv)})) {
+            .real => k.f = switch (kv.asNumber() orelse return it.failCode("TCL VALUE NUMBER", "expected floating-point number but got \"{s}\"", .{try it.str(kv)})) {
                 .int => |n| @floatFromInt(n),
                 .double => |d| d,
                 else => unreachable,

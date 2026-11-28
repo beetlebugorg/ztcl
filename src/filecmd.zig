@@ -541,7 +541,10 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return .{ .int = if (eql(s, "mtime")) st.mtime else st.atime };
     }
     if (eql(s, "stat") or eql(s, "lstat")) {
-        if (args.len != 2) return it.fail("wrong # args: should be \"file {s} name varName\"", .{s});
+        // Tcl 9 gives the dictionary of the fields for a call with no
+        // variable.
+        if (it.tcl9() and args.len == 1) return statList(it, try needInfo(it, try it.str(args[0]), "read"));
+        if (args.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"file {s} name {s}\"", .{ s, if (it.tcl9()) "?varName?" else "varName" });
         const st = try needInfo(it, try it.str(args[0]), "read");
         const name = try it.str(args[1]);
         const l = try it.list(try statList(it, st));

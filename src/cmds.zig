@@ -448,11 +448,11 @@ fn loop(it: *Interp, argv: []const Value, cmd: ?*Cmd, mode: enum { each, map, fi
     for (0..n) |k| {
         names[k] = try it.list(argv[1 + 2 * k]);
         lists[k] = try it.list(argv[2 + 2 * k]);
-        if (names[k].len == 0) return it.fail("{s} varlist is empty", .{switch (mode) {
-            .each => "foreach",
-            .map => "lmap",
-            .filter => "lfilter",
-        }});
+        if (names[k].len == 0) return switch (mode) {
+            .each => it.failCode("TCL OPERATION FOREACH NEEDVARS", "foreach varlist is empty", .{}),
+            .map => it.failCode("TCL OPERATION LMAP NEEDVARS", "lmap varlist is empty", .{}),
+            .filter => it.failCode("TCL OPERATION LFILTER NEEDVARS", "lfilter varlist is empty", .{}),
+        };
         passes = @max(passes, (lists[k].len + names[k].len - 1) / names[k].len);
     }
     const body = try it.scriptOf(argv, argv.len - 1, cmd);
@@ -1620,7 +1620,7 @@ fn cmdLassign(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdLrepeat(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("lrepeat count ?value ...?");
     const n = try it.int(argv[1]);
-    if (n < 0) return it.fail("bad count \"{d}\": must be integer >= 0", .{n});
+    if (n < 0) return it.failCode("TCL OPERATION LREPEAT NEGARG", "bad count \"{d}\": must be integer >= 0", .{n});
     const per = argv.len - 2;
     const total = std.math.mul(usize, @intCast(n), per) catch return it.fail("max length of a Tcl list exceeded", .{});
     if (total > 1 << 24) return it.fail("max length of a Tcl list exceeded", .{});
@@ -1697,16 +1697,16 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (oi + 1 >= last) return it.fail("\"-stride\" option must be followed by stride length", .{});
             oi += 1;
             const n = try it.int(argv[oi]);
-            if (n < 1) return it.fail("stride length must be at least 1", .{});
-            stride = std.math.cast(usize, n) orelse return it.fail("list size must be a multiple of the stride length", .{});
+            if (n < 1) return it.failCode("TCL OPERATION LSEARCH BADSTRIDE", "stride length must be at least 1", .{});
+            stride = std.math.cast(usize, n) orelse return it.failCode("TCL OPERATION LSEARCH BADSTRIDE", "list size must be a multiple of the stride length", .{});
         } else if (it.tcl9()) {
-            return it.fail("bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, -stride, or -subindices", .{s});
-        } else return it.fail("bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices", .{s});
+            return it.failWords(&.{ "TCL", "LOOKUP", "INDEX", "option", s }, "bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, -stride, or -subindices", .{s});
+        } else return it.failWords(&.{ "TCL", "LOOKUP", "INDEX", "option", s }, "bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices", .{s});
     }
     if (subindices and path == null) return it.fail("-subindices cannot be used without -index option", .{});
-    if (bisect and (all or not)) return it.fail("-bisect is not compatible with -all or -not", .{});
+    if (bisect and (all or not)) return it.failCode("TCL OPERATION LSEARCH BAD_OPTION_MIX", "-bisect is not compatible with -all or -not", .{});
     const items = try it.list(argv[argv.len - 2]);
-    if (items.len % stride != 0) return it.fail("list size must be a multiple of the stride length", .{});
+    if (items.len % stride != 0) return it.failCode("TCL OPERATION LSEARCH BADSTRIDE", "list size must be a multiple of the stride length", .{});
     // With groups, the first index of -index picks the element of the
     // group, and the rest of the indexes apply to that element.
     var lead: usize = 0;

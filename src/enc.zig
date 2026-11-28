@@ -242,10 +242,9 @@ pub fn cmdEncoding(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const a = it.alloc();
     const word = try it.str(argv[1]);
     const Sub = enum { convertfrom, convertto, dirs, names, profiles, system, user };
-    const which = if (it.tcl9())
-        try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .profiles, .user }, .code = "TCL LOOKUP SUBCOMMAND" })
-    else
-        try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .profiles, .user }, .head = "bad option", .code = "TCL LOOKUP INDEX option" });
+    // tclsh 8.6.16 and 9.0.4 both give the message and the code of an
+    // unknown subcommand.
+    const which = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .profiles, .user }, .code = "TCL LOOKUP SUBCOMMAND" });
     const args = argv[2..];
     switch (which) {
         .names => {

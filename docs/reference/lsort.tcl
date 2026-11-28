@@ -25,9 +25,8 @@ command lsort {
     example {lsort -dictionary {a10 a2 A1}} {A1 a2 a10}
     example {lsort -index 1 -decreasing {{a 1} {b 3} {c 2}}} {{b 3} {c 2} {a 1}}
     error {lsort} {wrong # args: should be "lsort ?-option value ...? list"} {TCL WRONGARGS}
-    error {lsort -bogus {a}} {bad option "-bogus": must be -ascii, -command, -decreasing, -dictionary, -increasing, -index, -indices, -integer, -nocase, -real, -stride, or -unique} NONE
+    error {lsort -bogus {a}} {bad option "-bogus": must be -ascii, -command, -decreasing, -dictionary, -increasing, -index, -indices, -integer, -nocase, -real, -stride, or -unique} {TCL LOOKUP INDEX option -bogus}
     error "lsort \"a \{b\"" {unmatched open brace in list} {TCL VALUE LIST BRACE}
-    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL OPERATION LSORT INDEXFAILED` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
 
     option -ascii {
         type flag
@@ -60,7 +59,7 @@ command lsort {
         description {Each element must be a number. The elements keep their form in the result: `1e2` stays `1e2`.}
         example {lsort -real {1.5 1e1 -2}} {-2 1.5 1e1}
         example {lsort -real {1e2 99.5}} {99.5 1e2}
-        error {lsort -real {1 x}} {expected floating-point number but got "x"} NONE
+        error {lsort -real {1 x}} {expected floating-point number but got "x"} {TCL VALUE NUMBER}
     }
     option -command {
         value SCRIPT
@@ -125,7 +124,7 @@ command lsort {
         example {lsort -index 1 -decreasing {{a 1} {b 3} {c 2}}} {{b 3} {c 2} {a 1}}
         example {lsort -index end {{a 1} {b 0}}} {{b 0} {a 1}}
         example {lsort -index {1 0} {{a {z 1}} {b {y 2}}}} {{b {y 2}} {a {z 1}}}
-        error {lsort -index 1 {{a 1} {b}}} {element 1 missing from sublist "b"} NONE
+        error {lsort -index 1 {{a 1} {b}}} {element 1 missing from sublist "b"} {TCL OPERATION LSORT INDEXFAILED}
     }
     option -stride {
         value N
@@ -134,8 +133,8 @@ command lsort {
         description {The list is groups of N elements, and its length must be a multiple of N. The sort compares the first element of each group, or the element of `-index` in the group, and moves each group whole.}
         example {lsort -stride 2 {b 2 a 1}} {a 1 b 2}
         example {lsort -stride 2 -index 1 {b 2 a 1}} {a 1 b 2}
-        error {lsort -stride 3 {a b}} {list size must be a multiple of the stride length} NONE
-        error {lsort -stride 1 {b a}} {stride length must be at least 2} NONE
+        error {lsort -stride 3 {a b}} {list size must be a multiple of the stride length} {TCL OPERATION LSORT BADSTRIDE}
+        error {lsort -stride 1 {b a}} {stride length must be at least 2} {TCL OPERATION LSORT BADSTRIDE}
         error {lsort -stride 2 -index 2 {a b}} {when used with "-stride", the leading "-index" value must be within the group} NONE
     }
 }

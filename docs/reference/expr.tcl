@@ -22,7 +22,6 @@ command expr {
     release {In Tcl 8.6 an integer with a leading zero, such as `010`, is octal (8). In Tcl 9.1 it is decimal (10), and only `0o10` is octal.}
     release {Tcl 9.1 has the string comparison operators `lt`, `le`, `gt`, and `ge`, the prefix `0d` of decimal integers, and `_` between the digits of a number, such as `1_000`.}
     release {In Tcl 9.1 the message of an operand of the wrong type names the value and the side of the operand, such as `cannot use non-numeric string "ten" as left operand of "+"`, and a list operand is `cannot use a list as left operand of "*"` with `-errorcode ARITH DOMAIN list`.}
-    difference {A variable with no value has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     argument ARG {
         type expression
         repeats

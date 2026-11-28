@@ -248,27 +248,29 @@ fn peek(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value
         if (idx) |i| {
             if (cell.v == .arr) {
                 if (interp.elemOrDefault(cell.v.arr, i)) |v| return v;
-                return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, i });
+                return it.readFail(.read, name, "can't read \"{s}({s})\": no such element in array", .{ name, i });
             }
-            return it.fail("can't read \"{s}({s})\": no such variable", .{ name, i });
+            return it.readFail(.lookup_elem, name, "can't read \"{s}({s})\": no such variable", .{ name, i });
         }
         if (cell.v == .val) return cell.v.val;
-        if (cell.v == .arr) return it.fail("can't read \"{s}\": variable is array", .{name});
-        return it.fail("can't read \"{s}\": no such variable", .{name});
+        if (cell.v == .arr) return it.readFail(.read, name, "can't read \"{s}\": variable is array", .{name});
+        // A cell with no value and no trace is a variable that Tcl
+        // removes, so the read is a lookup that finds no variable.
+        return it.readFail(.lookup, name, "can't read \"{s}\": no such variable", .{name});
     }
     const t = cell.v.traced;
     if (idx) |i| switch (t.inner) {
         .arr => |m| {
             if (interp.elemOrDefault(m, i)) |v| return v;
-            return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, i });
+            return it.readFail(.read, name, "can't read \"{s}({s})\": no such element in array", .{ name, i });
         },
-        .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, i }),
-        .undef => return it.fail("can't read \"{s}({s})\": no such variable", .{ name, i }),
+        .val => return it.readFail(.lookup_elem, name, "can't read \"{s}({s})\": variable isn't array", .{ name, i }),
+        .undef => return it.readFail(.lookup_elem, name, "can't read \"{s}({s})\": no such variable", .{ name, i }),
     };
     return switch (t.inner) {
         .val => |v| v,
-        .arr => it.fail("can't read \"{s}\": variable is array", .{name}),
-        .undef => it.fail("can't read \"{s}\": no such variable", .{name}),
+        .arr => it.readFail(.read, name, "can't read \"{s}\": variable is array", .{name}),
+        .undef => it.readFail(.read, name, "can't read \"{s}\": no such variable", .{name}),
     };
 }
 

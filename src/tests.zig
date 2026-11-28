@@ -3929,6 +3929,18 @@ test "file separator, system, volumes, and tempfile check the count of their arg
     try std.testing.expectEqualStrings("/ /", try it.str(try it.eval("list [file separator] [file separator a]")));
 }
 
+test "file stat with no variable: an error in Tcl 8.6, a dictionary in Tcl 9.1" {
+    for ([_]tcl.interp.TclVersion{ .v8_6, .v9_1 }, [_][]const u8{ "{wrong # args: should be \"file stat name varName\"} {TCL WRONGARGS}", "{could not read \"nope.txt\": no such file or directory} {POSIX ENOENT {no such file or directory}}" }) |v, want| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        try it.setTclVersion(v);
+        try it.allow(@backingInt(tcl.interp.Capability.file));
+        try tcl.fsroot.setRoot(&it, ".");
+        try std.testing.expectEqualStrings(want, try it.str(try it.eval("catch {file stat nope.txt} m o; list $m [dict get $o -errorcode]")));
+    }
+}
+
 test "a file writes the line end of the platform, and binary reads back as lf" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

@@ -64,7 +64,7 @@ command lset {
     error {
         unset -nocomplain nv
         lset nv 0 x
-    } {can't read "nv": no such variable} NONE
+    } {can't read "nv": no such variable} {TCL LOOKUP VARNAME nv}
     error {lset} {wrong # args: should be "lset listVar ?index? ?index ...? value"} {TCL WRONGARGS}
     release {In Tcl 9.1 the message of an index out of range names the index, as in `index "5" out of range`, with the code `TCL VALUE INDEX OUTOFRANGE`. Tcl 8.6 gives `list index out of range` with `TCL OPERATION LSET BADINDEX`.}
 }

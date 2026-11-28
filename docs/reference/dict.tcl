@@ -16,7 +16,6 @@ command dict {
         The first argument names the subcommand, and a unique prefix of its name is enough.
     }
     returns {The result of the subcommand.}
-    difference {A variable with no value has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     see {array list lsort {string map}}
     release {Tcl 9.1 adds `dict getdef` and its other name `dict getwithdefault`.}
     example {set d [dict create text milk done 0]} {text milk done 0}
@@ -713,7 +712,7 @@ command dict {
         error {
             unset -nocomplain nod
             dict with nod {}
-        } {can't read "nod": no such variable} NONE
+        } {can't read "nod": no such variable} {TCL LOOKUP VARNAME nod}
     }
 
     subcommand info {

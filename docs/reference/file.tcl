@@ -426,6 +426,7 @@ command file {
         summary {Puts the facts of a file in an array.}
         description {Sets the elements of the array VAR to the facts of NAME: `atime`, `ctime`, `dev`, `gid`, `ino`, `mode`, `mtime`, `nlink`, `size`, `type`, and `uid`. A missing file is an error.}
         returns {An empty string.}
+        release {In Tcl 9.1 VAR is optional: with no VAR the result is a dictionary of the facts.}
         see {{file lstat} {file size} {file type}}
         argument NAME {
             type path
@@ -446,7 +447,8 @@ command file {
             lsort [array names s]
         } {atime ctime dev gid ino mode mtime nlink size type uid}
         error {file stat nope.txt st} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}}
-        error {file stat nope.txt} {wrong # args: should be "file stat name varName"} NONE
+        error {file stat nope.txt} {wrong # args: should be "file stat name varName"} {TCL WRONGARGS} -tcl 8.6
+        error {file stat nope.txt} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}} -tcl 9.1
     }
 
     subcommand lstat {
@@ -454,6 +456,7 @@ command file {
         summary {Puts the facts of a file in an array, for a link itself.}
         description {Sets the elements of VAR as `file stat` does. For a link it gives the facts of the link, and not of its target.}
         returns {An empty string.}
+        release {In Tcl 9.1 VAR is optional: with no VAR the result is a dictionary of the facts.}
         see {{file stat}}
         argument NAME {
             type path
@@ -468,7 +471,8 @@ command file {
             file lstat n.txt st
             set st(type)
         } file
-        error {file lstat nope.txt} {wrong # args: should be "file lstat name varName"} NONE
+        error {file lstat nope.txt} {wrong # args: should be "file lstat name varName"} {TCL WRONGARGS} -tcl 8.6
+        error {file lstat nope.txt} {could not read "nope.txt": no such file or directory} {POSIX ENOENT {no such file or directory}} -tcl 9.1
     }
 
     subcommand attributes {

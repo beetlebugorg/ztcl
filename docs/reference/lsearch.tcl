@@ -32,11 +32,10 @@ command lsearch {
     example {lsearch -index 0 {{x 1} {y 2}} y} 1
     example {lsearch -exact -all -inline -not {a b c b} b} {a c}
     error {lsearch {a}} {wrong # args: should be "lsearch ?-option value ...? list pattern"} {TCL WRONGARGS}
-    error {lsearch -bogus {a} a} {bad option "-bogus": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, -stride, or -subindices} NONE -tcl 9.1
-    error {lsearch -bogus {a} a} {bad option "-bogus": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices} NONE -tcl 8.6
+    error {lsearch -bogus {a} a} {bad option "-bogus": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, -stride, or -subindices} {TCL LOOKUP INDEX option -bogus} -tcl 9.1
+    error {lsearch -bogus {a} a} {bad option "-bogus": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices} {TCL LOOKUP INDEX option -bogus} -tcl 8.6
     error "lsearch \"a \{b\" a" {unmatched open brace in list} {TCL VALUE LIST BRACE}
     release {Tcl 9.1 has the option `-stride`.}
-    difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL OPERATION LSEARCH BAD_OPTION_MIX` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     release {In Tcl 9.1 the message of a bad regular expression starts with `cannot compile`, and in Tcl 8.6 with `couldn't compile`.}
     release {With `-subindices -inline` and no `-all`, Tcl 8.6 gives the whole element and Tcl 9.1 gives the subelement. With `-all` both give the subelements.}
 
@@ -76,7 +75,7 @@ command lsearch {
         example {lsearch -sorted {a b c d} c} 2
         example {lsearch -sorted -integer {1 5 9 12} 9} 2
         example {lsearch -all -sorted {a a b} a} {0 1}
-        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} NONE
+        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} {TCL OPERATION LSEARCH BAD_OPTION_MIX}
     }
     option -bisect {
         type flag
@@ -85,7 +84,7 @@ command lsearch {
         example {lsearch -sorted -bisect {a b d} c} 1
         example {lsearch -sorted -bisect -integer {1 5 9} 6} 1
         example {lsearch -sorted -bisect {b c} a} -1
-        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} NONE
+        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} {TCL OPERATION LSEARCH BAD_OPTION_MIX}
     }
     option -all {
         type flag
@@ -93,7 +92,7 @@ command lsearch {
         description {Gives a list of the index of each matching element, in order, or an empty list when no element matches. With `-inline` it gives the elements.}
         example {lsearch -all {a b a} a} {0 2}
         example {lsearch -all {a b} z} {}
-        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} NONE
+        error {lsearch -sorted -bisect -all {a b} a} {-bisect is not compatible with -all or -not} {TCL OPERATION LSEARCH BAD_OPTION_MIX}
     }
     option -inline {
         type flag
@@ -110,7 +109,7 @@ command lsearch {
         example {lsearch -not {a b c} a} 1
         example {lsearch -not -all {a b c} a} {1 2}
         example {lsearch -inline -not {a b} a} b
-        error {lsearch -sorted -bisect -not {a b} a} {-bisect is not compatible with -all or -not} NONE
+        error {lsearch -sorted -bisect -not {a b} a} {-bisect is not compatible with -all or -not} {TCL OPERATION LSEARCH BAD_OPTION_MIX}
     }
     option -start {
         value INDEX
@@ -209,7 +208,7 @@ command lsearch {
         example {lsearch -stride 2 -index 1 {a 1 b 2} 2} 2
         example {lsearch -stride 2 -inline {a 1 b 2} b} {b 2}
         example {lsearch -stride 2 -all {a 1 a 2} a} {0 2}
-        error {lsearch -stride 3 {a b} a} {list size must be a multiple of the stride length} NONE
-        error {lsearch -stride 0 {a} a} {stride length must be at least 1} NONE
+        error {lsearch -stride 3 {a b} a} {list size must be a multiple of the stride length} {TCL OPERATION LSEARCH BADSTRIDE}
+        error {lsearch -stride 0 {a} a} {stride length must be at least 1} {TCL OPERATION LSEARCH BADSTRIDE}
     }
 }

@@ -404,7 +404,7 @@ fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const a = it.alloc();
     const Sub = enum { anymore, default, donesearch, exists, @"for", get, names, nextelement, set, size, startsearch, statistics, unset };
     const word = try it.str(argv[1]);
-    const sub = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .@"for", .default }, .code = "TCL LOOKUP INDEX subcommand" });
+    const sub = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .@"for", .default }, .code = "TCL LOOKUP SUBCOMMAND" });
     if (sub == .@"for") return arrayFor(it, argv, cmd);
     if (sub == .default) return arrayDefault(it, argv);
     if (argv.len < 3) {

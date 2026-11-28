@@ -33,8 +33,7 @@ command lmap {
     example {lmap {a b} {1 2 3 4 5} {list $a $b}} {{1 2} {3 4} {5 {}}}
     example {lmap x {1 2} y {a b c} {list $x $y}} {{1 a} {2 b} {{} c}}
     example {lmap x {1 2} {}} {{} {}}
-    error {lmap {} {1} {set x}} {lmap varlist is empty} NONE
+    error {lmap {} {1} {set x}} {lmap varlist is empty} {TCL OPERATION LMAP NEEDVARS}
     error {lmap x {1 2} {error oops}} oops NONE
     error {lmap x {1}} {wrong # args: should be "lmap varList list ?varList list ...? command"} {TCL WRONGARGS}
-    difference {An empty VARLIST has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL OPERATION LMAP NEEDVARS` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
 }

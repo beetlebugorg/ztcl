@@ -24,7 +24,6 @@ command lrepeat {
     example {lrepeat 3 a b} {a b a b a b}
     example {lrepeat 2 {a b}} {{a b} {a b}}
     example {lrepeat 0 a} {}
-    error {lrepeat -1 a} {bad count "-1": must be integer >= 0} NONE
+    error {lrepeat -1 a} {bad count "-1": must be integer >= 0} {TCL OPERATION LREPEAT NEGARG}
     error {lrepeat x a} {expected integer but got "x"} {TCL VALUE NUMBER}
-    difference {A negative count has `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give `TCL OPERATION LREPEAT NEGARG` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
 }
