@@ -32,6 +32,11 @@ AREAS = [
 MULTI = {"syn", "sub", "opt", "ex", "err", "names", "diff"}
 # The capabilities of the runner for tools/refdoc.tcl.
 REFDOC = ["--allow", "interp,file,channels,exec", "--tclsh", str(ROOT / "tools" / "refdoc.tcl")]
+# The runner gives a program of exec only the variables of --exec-env, and
+# on Windows a child with no SystemRoot cannot open a socket, so the
+# examples of ztcl::tls need it there.
+if os.name == "nt" and os.environ.get("SystemRoot"):
+    REFDOC[2:2] = ["--exec-env", "SystemRoot=" + os.environ["SystemRoot"]]
 
 
 def runner():
