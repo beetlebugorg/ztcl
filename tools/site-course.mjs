@@ -173,7 +173,7 @@ await started();
 await pause(300);
 const g3 = await evalJS(`(() => { const p = document.querySelector(".zcourse").getBoundingClientRect(); return { w: p.width, h: p.height }; })()`);
 check("a reload keeps the size of the panel", Math.abs(g3.w - g2.w) < 2 && Math.abs(g3.h - g2.h) < 2, JSON.stringify({ g2, g3 }));
-const screen = await evalJS(`(async () => (await import("./../../assets/shell.js")).pageShell().then((v) => v.shell.text().join("\\n")))()`);
+const screen = await evalJS(`(async () => (await import(document.querySelector('script[src$="assets/shell.js"]').src)).pageShell().then((v) => v.shell.text().join("\\n")))()`);
 if (ran) check("a reload runs the commands again", !!screen && screen.includes(`Ran your ${ran} earlier`), screen);
 await evalJS(`document.querySelector(".zcourse-again").click()`);
 await pause(500);

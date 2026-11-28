@@ -9,6 +9,16 @@ Markdown files, and all pages use docs/site/site.css. The build needs
 markdown-it-py (tools/docs-requirements.txt). It stops with an error for a
 link to a missing page or a missing anchor, also on the HTML pages.
 
+The pages of a command in the Tcl format of the reference (tools/refdoc.tcl,
+docs/dev/reference-format.md) are static HTML: a page for the command at
+reference/NAME/ and a page for each subcommand at reference/NAME/SUB/,
+with the meta description and JSON-LD of `refdoc.tcl pages`, which runs
+on the runner of zig-out/bin. The build resolves each link of those
+pages (href="refdoc:TARGET") and adds docs/site/reference.css. It writes
+sitemap.xml with each page, and then checks each page of the output: a
+title, a meta description, one h1, a canonical link to its own URL, and a
+line in the sitemap. It stops with an error for a page that fails.
+
 The playground is docs/site/playground/ with the JS modules of web/ and
 the four modules of zig-out/lib/. The shell of the landing page and of
 docs/site/try/ (docs/site/shell.js) loads ztcl-shell.wasm from there.
@@ -206,6 +216,9 @@ class Build:
         self.checkpoints = {}
         self.files_of = {}
         self.links = []
+        # The head of a page of a TOML entry of the reference: its meta
+        # description and its JSON-LD.
+        self.meta = {}
 
     def live_blocks(self, src, tokens):
         """Reads the comment lines before a code block and drops them.
@@ -493,7 +506,8 @@ class Build:
 
     def document(self, page, title, body):
         root = rel(page, "")
-        name = f"{html.escape(title)} · ztcl"
+        meta = self.meta.get(page, {})
+        name = f"{html.escape(title)} · {'Tcl command · ' if meta.get('head') else ''}ztcl"
         script = f'\n<script type="module" src="{root}assets/live.js"></script>' if 'class="live-demo"' in body else ""
         course, dock = page.startswith("learn/") or (page.startswith("reference/") and page != "reference/"), ""
         if course:
@@ -506,14 +520,14 @@ class Build:
             script += f'\n<script type="module" src="{root}assets/shell.js"></script>'
         if 'class="zhelper"' in body:
             script += f'\n<script type="module" src="{root}assets/helper.js"></script>'
-        desc = "A sandboxed Tcl interpreter in Zig, with a bytecode VM and a JIT."
+        desc = html.escape(meta.get("description") or "A sandboxed Tcl interpreter in Zig, with a bytecode VM and a JIT.", quote=True)
         return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{name}</title><meta name="description" content="{desc}">
 <link rel="canonical" href="{SITE}{page}">
 <link rel="icon" href="{root}assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="{root}assets/site.css">{script}</head>
+<link rel="stylesheet" href="{root}assets/site.css">{f'<link rel="stylesheet" href="{root}assets/reference.css">' if meta.get("head") else ""}{script}{meta.get("head", "")}</head>
 <body{' class="course"' if course else ''}><a class="skip" href="#content">Skip to the content</a>
 <header class="top"><div class="wrap"><a class="logo" href="{root}"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
 <nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a href="{root}try/">Shell</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
@@ -591,6 +605,11 @@ class Build:
         """The pages of the command reference (tools/reference.py), and the
         list of each area for the index page reference/."""
         entries = reference.parse()
+        # The pages of the Tcl entries, by entry, and the page of each
+        # command and subcommand name of them.
+        ref2 = reference.refdoc_json("pages") if any(e.get("format") == 2 for e in entries) else []
+        self.ref2 = {p["title"]: p["page"] for p in ref2}
+        self.legacy_pages = {n: f"reference/{reference.slug(e['name'])}/" for e in entries for n in reference.names(e)}
         pages, areas = [], []
         for area, label in reference.AREAS:
             items = [e for e in entries if e["area"] == area]
@@ -600,9 +619,19 @@ class Build:
             for e in items:
                 slug = reference.slug(e["name"])
                 page = f"reference/{slug}/"
-                text = reference.markdown(e, lambda n: n)
-                title, body = self.render(f"docs/reference/{slug}/index.md", page, text)
-                pages.append((page, title, body))
+                if e.get("format") == 2:
+                    for p in ref2:
+                        if not p["page"].startswith(page):
+                            continue
+                        body = re.sub(r'href="refdoc:([^"]*)"', lambda m, at=p["page"]: f'href="{html.escape(self.ref_link(html.unescape(m.group(1)), at))}"', p["body"])
+                        self.anchors[p["page"]] = set(re.findall(r'id="([^"]+)"', body))
+                        self.meta[p["page"]] = {"description": p["description"], "head": p["head"]}
+                        pages.append((p["page"], p["title"], body))
+                else:
+                    text = reference.markdown(e, lambda n: n)
+                    title, body = self.render(f"docs/reference/{slug}/index.md", page, text)
+                    self.meta[page] = {"description": reference.first_sentence(e["does"])}
+                    pages.append((page, title, body))
                 cap = f' <span class="ref-cap">{html.escape(e["cap"])}</span>' if "cap" in e else ""
                 first = e["does"].split(". ")[0].rstrip(".") + "."
                 rows.append(f'<li data-name="{html.escape(" ".join(reference.names(e)).lower())}"><a href="{slug}/"><code>{html.escape(e["name"])}</code></a>{cap} {re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(first))}</li>')
@@ -616,6 +645,63 @@ class Build:
         self.reference_md = [(page, reference.markdown(e, lambda n: n)) for e in entries for page in [f"reference/{reference.slug(e['name'])}/"]]
         self.api_json = reference.api(entries)
         return pages, index
+
+    def ref_link(self, target, page):
+        """The href of a link target of a Tcl entry (refdoc.tcl pages): a
+        URL, `cmd:NAME` or `cmd:NAME#anchor` for a command or a
+        subcommand, or a folder of the site with an optional anchor."""
+        if re.match(r"^[a-z][a-z0-9+.-]*:", target) and not target.startswith("cmd:"):
+            return target
+        path, _, frag = target.partition("#")
+        if path.startswith("cmd:"):
+            name = path[4:]
+            other = self.ref2.get(name) or self.legacy_pages.get(name) or self.legacy_pages.get(name.split()[0])
+            if other is None:
+                raise SystemExit(f"{page}: a link to a command with no page: {name}")
+        else:
+            other = path
+            if other not in PAGE_OF.values() and other not in self.anchors and not other.startswith("reference/"):
+                raise SystemExit(f"{page}: a link to a missing page: {target}")
+        if frag:
+            self.links.append((page, other, frag))
+        return rel(page, other) + (f"#{frag}" if frag else "")
+
+    @staticmethod
+    def sitemap(out, pages):
+        """sitemap.xml: the URL of each page."""
+        urls = "".join(f"<url><loc>{html.escape(SITE + p)}</loc></url>\n" for p in pages)
+        (out / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
+                                         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                                         f"{urls}</urlset>\n", encoding="utf-8")
+
+    @staticmethod
+    def check_pages(out):
+        """Checks each page of the output folder for search engines: a
+        title, a meta description, one h1, a canonical link to its own
+        URL, and a line in sitemap.xml. A redirect page has none of them
+        and is not in the sitemap."""
+        listed = set(re.findall(r"<loc>([^<]+)</loc>", (out / "sitemap.xml").read_text(encoding="utf-8")))
+        bad, count = [], 0
+        for path in sorted(out.rglob("index.html")):
+            text = path.read_text(encoding="utf-8")
+            folder = path.parent.relative_to(out).as_posix()
+            url = SITE + ("" if folder == "." else folder + "/")
+            if 'http-equiv="refresh"' in text:
+                if url in listed:
+                    bad.append(f"{url}: a redirect in the sitemap")
+                continue
+            count += 1
+            title = re.search(r"<title>([^<]+)</title>", text)
+            desc = re.search(r'<meta name="description" content="([^"]+)"', text)
+            canon = re.search(r'<link rel="canonical" href="([^"]+)"', text)
+            h1 = len(re.findall(r"<h1[ >]", text))
+            for ok, what in ((title, "no title"), (desc, "no meta description"), (h1 == 1, f"{h1} h1 elements, not one"),
+                             (canon and html.unescape(canon.group(1)) == url, "no canonical link to its URL"), (url in listed, "not in sitemap.xml")):
+                if not ok:
+                    bad.append(f"{url}: {what}")
+        if bad:
+            raise SystemExit("the pages for search engines:\n" + "\n".join(bad))
+        return count
 
     def run(self, out):
         ref_pages, ref_index = self.reference_pages()
@@ -637,7 +723,7 @@ class Build:
             (folder / "index.html").write_text(self.document(page, title, body), encoding="utf-8")
         shutil.copy(SITE_DIR / "index.html", out / "index.html")
         (out / "assets").mkdir()
-        for name in ("site.css", "favicon.svg", "live.js", "shell.js", "helper.js"):
+        for name in ("site.css", "reference.css", "favicon.svg", "live.js", "shell.js", "helper.js"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
         if (ROOT / "docs" / "images").is_dir():
             shutil.copytree(ROOT / "docs" / "images", out / "images")
@@ -680,7 +766,9 @@ class Build:
             for page, text in self.reference_md:
                 f.write(f"\n\n<!-- {SITE}{page} -->\n\n{text}")
         (out / ".nojekyll").write_text("", encoding="utf-8")
-        print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")
+        self.sitemap(out, [p for _, p in HTML_PAGES] + [p for p, _, _ in rendered])
+        checked = self.check_pages(out)
+        print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}, and checked {checked} pages and sitemap.xml")
 
 
 if __name__ == "__main__":
