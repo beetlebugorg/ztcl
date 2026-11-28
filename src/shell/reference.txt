@@ -654,7 +654,20 @@ sub: ztcl::text sentences STRING | Gives the list of the sentences of a string.
 sub: ztcl::text width ?-ambiguous narrow|wide? STRING | Gives the count of columns of a string in a terminal or a monospace font.
 sub: ztcl::text bounds ?-unit grapheme|word|sentence? STRING | Gives the character index of each boundary of a string.
 == ztcl::vt
-syn: ztcl::vt subcommand ?arg ...?
+syn: ztcl::vt SUBCOMMAND ?ARG ...?
+sub: ztcl::vt new ?-size {COLS ROWS}? ?-scrollback LINES? | Makes a terminal and gives its handle.
+sub: ztcl::vt feed HANDLE BYTES | Feeds the bytes of a program to a terminal and gives its reply.
+sub: ztcl::vt resize HANDLE COLS ROWS | Changes the size of a terminal.
+sub: ztcl::vt size HANDLE | Gives the count of columns and of rows of a terminal.
+sub: ztcl::vt cursor HANDLE | Gives the place of the cursor.
+sub: ztcl::vt modes HANDLE | Gives a dict of the modes of a terminal.
+sub: ztcl::vt rows HANDLE ?FIRST? ?LAST? | Gives the text of the rows of a terminal.
+sub: ztcl::vt cells HANDLE ?FIRST? ?LAST? | Gives the cells of the rows of a terminal.
+sub: ztcl::vt dirty HANDLE | Gives the rows that changed since the last call.
+sub: ztcl::vt scrollback HANDLE | Gives the count of lines in the scrollback.
+sub: ztcl::vt title HANDLE | Gives the title of a terminal.
+sub: ztcl::vt bells HANDLE | Gives the count of bells since the terminal was made.
+sub: ztcl::vt delete HANDLE | Frees a terminal.
 == ztcl::wasm
 syn: ztcl::wasm subcommand ?arg ...?
 sub: load fileName | Reads, decodes, and validates a module file, and gives a module handle.
