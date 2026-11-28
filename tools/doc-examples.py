@@ -106,13 +106,23 @@ def lesson(runner, page, text):
 
 def reference(runner):
     """Runs the examples of each entry of the command reference, one
-    script for each entry, with the flags of the entry."""
+    script for each entry, with the flags of the entry. tools/refdoc.tcl
+    runs the examples of an entry in the Tcl format."""
     import importlib.util
     spec = importlib.util.spec_from_file_location("reference", pathlib.Path(__file__).with_name("reference.py"))
     ref = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ref)
     count = fail = 0
     for e in ref.parse():
+        if e.get("format") == 2:
+            code, out = ref.refdoc("check", runner, e["name"])
+            for line in out.splitlines():
+                if line.startswith("FAIL"):
+                    print(line)
+            m = re.search(r"^(\d+) examples and errors", out, re.M)
+            count += int(m.group(1)) if m else 0
+            fail |= 1 if code else 0
+            continue
         if "cap" in e and "flags" not in e:
             continue
         text = ref.markdown(e, lambda n: n, check=True)

@@ -2,13 +2,13 @@
 == string
 syn: string subcommand ?arg ...?
 sub: string length STRING | The count of characters.
-sub: string length -grapheme STRING | The count of grapheme clusters.
+sub: string length -grapheme STRING | The count of characters.
 sub: string bytelength STRING | The count of bytes of the UTF-8 form.
 sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX.
 sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
-sub: string index -grapheme STRING INDEX | The grapheme cluster at INDEX, with INDEX in clusters.
+sub: string index -grapheme STRING INDEX | The character at INDEX, or an empty string past the end.
 sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
-sub: string range -grapheme STRING FIRST LAST | The grapheme clusters from FIRST to LAST.
+sub: string range -grapheme STRING FIRST LAST | The characters from FIRST to LAST.
 sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
 sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
 sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
@@ -18,7 +18,7 @@ sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and valu
 sub: string repeat STRING COUNT | STRING COUNT times.
 sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
 sub: string reverse STRING | The characters in the reverse order.
-sub: string reverse -grapheme STRING | The grapheme clusters in the reverse order, each with its characters in order.
+sub: string reverse -grapheme STRING | The characters in the reverse order.
 sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
 sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
 sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.

@@ -4,11 +4,20 @@
 tools/build-docs.py makes a page of each entry, the index, and api.json
 from it. tools/doc-examples.py runs the examples of each entry, and
 tools/ref-coverage.py checks that each registered command has an entry.
-docs/reference/README.md gives the format.
+docs/dev/reference.md gives the format.
+
+A command can instead have its own file in the Tcl format of
+tools/refdoc.tcl (docs/reference/NAME.tcl, docs/dev/reference-format.md).
+parse() runs `refdoc.tcl legacy` with the runner of zig-out/bin, and gives
+each such entry in the same shape, with "format": 2, before the entries
+of the text file of its area. Build the runner with `zig build` first.
 """
 import json
+import os
 import pathlib
 import re
+import subprocess
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FOLDER = ROOT / "docs" / "reference"
@@ -21,12 +30,48 @@ AREAS = [
     ("system", "The system"), ("ztcl", "ztcl modules"),
 ]
 MULTI = {"syn", "sub", "opt", "ex", "err", "names", "diff"}
+# The capabilities of the runner for tools/refdoc.tcl.
+REFDOC = ["--allow", "interp,file,channels,exec", "--tclsh", str(ROOT / "tools" / "refdoc.tcl")]
+
+
+def runner():
+    """The ztcl runner of zig-out/bin."""
+    for name in ("ztcl", "ztcl.exe"):
+        path = ROOT / "zig-out" / "bin" / name
+        if path.exists():
+            return str(path)
+    raise SystemExit("zig-out/bin/ztcl is missing: run `zig build` first")
+
+
+def refdoc(*args):
+    """Runs tools/refdoc.tcl with the runner. Gives its exit code and its
+    output."""
+    r = subprocess.run([runner(), *REFDOC, *args], capture_output=True, timeout=600, cwd=ROOT)
+    return r.returncode, r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
+
+
+def refdoc_json(kind):
+    """The JSON that `refdoc.tcl legacy` or `refdoc.tcl pages` writes."""
+    fd, path = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    try:
+        code, out = refdoc(kind, path)
+        if code != 0:
+            raise SystemExit(f"tools/refdoc.tcl {kind}: {out.strip()}")
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    finally:
+        os.unlink(path)
 
 
 def parse():
-    """Gives the entries of each file in the order of AREAS."""
+    """Gives the entries of each area in the order of AREAS: first the
+    Tcl entries of the area, then the entries of its text file."""
+    tcl = refdoc_json("legacy")
+    for e in tcl:
+        e.update(format=2, line=1)
     entries = []
     for area, _ in AREAS:
+        entries += [e for e in tcl if e["area"] == area]
         path = FOLDER / f"{area}.txt"
         if not path.exists():
             continue

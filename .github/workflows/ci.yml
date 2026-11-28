@@ -257,6 +257,8 @@ jobs:
         run: |
           python3 -I tools/doc-examples.py zig-out/bin/ztcl --reference docs/modules/vt.md docs/modules/watch.md docs/learn/*.md
           python3 -I tools/ref-coverage.py zig-out/bin/ztcl
+          zig-out/bin/ztcl --allow interp,file,channels,exec --tclsh tools/refdoc.tcl lint
+          zig-out/bin/ztcl --allow interp,file,channels,exec --tclsh tools/refdoc.tcl selftest
           python3 -I tools/reference.py shell-table | diff - src/shell/reference.txt
           python3 -I tools/doc-coverage.py
       - name: Check the PDF output of ztcl::pdf and the book
@@ -1007,6 +1009,8 @@ jobs:
         run: |
           python3 -I tools/doc-examples.py zig-out/bin/ztcl --reference docs/modules/vt.md docs/modules/watch.md docs/learn/*.md
           python3 -I tools/ref-coverage.py zig-out/bin/ztcl
+          zig-out/bin/ztcl --allow interp,file,channels,exec --tclsh tools/refdoc.tcl lint
+          zig-out/bin/ztcl --allow interp,file,channels,exec --tclsh tools/refdoc.tcl selftest
           python3 -I tools/reference.py shell-table | diff - src/shell/reference.txt
           python3 -I tools/doc-coverage.py
       - name: Check the format
