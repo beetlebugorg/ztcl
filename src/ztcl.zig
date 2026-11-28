@@ -111,6 +111,7 @@ test {
     _ = @import("notify_windows.zig");
     _ = value;
     _ = interp;
+    _ = chan;
     _ = expr;
     _ = noise;
     _ = point;
