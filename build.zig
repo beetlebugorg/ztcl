@@ -1295,6 +1295,8 @@ fn addUnikernel(b: *std.Build, size_plant: usize, host: std.Build.ResolvedTarget
     const off: [all_modules.len]bool = @splat(false);
     addModuleOptions(b, opts, off);
     exe.root_module.addOptions("build_options", opts);
+    // src/more.zig imports `b64_simd`.
+    addCrypto(b, exe.root_module);
     exe.bundle_compiler_rt = true;
     return exe;
 }
