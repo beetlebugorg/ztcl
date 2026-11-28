@@ -2202,7 +2202,7 @@ pub inline fn opUnary(comptime named: bool, it: *Interp, f: *Frame, code: *const
 pub inline fn opNumberForm(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code, i };
     const v = stack[sp - 1];
-    if (v == .str) stack[sp - 1] = try expr.numberForm(it, v);
+    if (v == .str or v == .double) stack[sp - 1] = try expr.numberForm(it, v);
 }
 
 /// Adds `i.b` to slot `i.a` and gives the sum.

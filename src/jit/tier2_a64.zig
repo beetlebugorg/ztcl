@@ -27,7 +27,8 @@
 //! fused multiply-add. No register holds a NaN, so the compares use the
 //! conditions `mi`, `ls`, `gt`, `ge`, `eq`, and `ne` after `fcmp`. A
 //! result that can be a NaN gets `fcmp` with itself and `b.vs` to an exit
-//! after the instruction, with the result in its place.
+//! before the instruction. A NaN result is a domain error in Tcl, and the
+//! interpreter runs the instruction again for the error.
 //!
 //! An exit writes each slot register to its cell and each stack place to
 //! the value stack, gives back the steps of the part that did not run,
@@ -838,18 +839,13 @@ const Emitter = struct {
         const i = e.code.ins[pc];
         const safe = lower.nanFree(op, .{ .finite = a.finite, .nonzero = a.nonzero }, .{ .finite = b.finite, .nonzero = b.nonzero });
         var dest = e.dplace(k);
-        var resume_pc = pc + 1;
         var fused = false;
         if (e.nextIs(pc, .store_pop)) {
             if (e.slotD(e.code.ins[pc + 1].a)) |x| {
                 dest = x;
-                resume_pc = pc + 2;
                 fused = true;
             }
         }
-        if (!safe) try e.settleBelow(pc, k) else try e.settleReg(pc, k, dest);
-        const ax = try e.inD(a, dx0);
-        const bx = try e.inD(b, dx1);
         const o: a64.FOp = switch (op) {
             .add => .fadd,
             .sub => .fsub,
@@ -857,8 +853,24 @@ const Emitter = struct {
             .div => .fdiv,
             else => unreachable,
         };
-        // A three-operand form: the operands keep their registers.
-        try s.fop(o, dest, ax, bx);
+        if (!safe) {
+            // A NaN result is a domain error. The check exits before the
+            // instruction, and the interpreter runs it again for the
+            // error. So each place goes to its register, the result goes
+            // to d20, and the operands keep their values until the check.
+            try e.settle(pc);
+            const nan = try e.guardExit(pc, e.left[pc - e.p.head]);
+            const ax = try e.inD(a, dx0);
+            const bx = try e.inD(b, dx1);
+            try s.fop(o, dx0, ax, bx);
+            try s.fcmp(dx0, dx0);
+            try s.bcond(.vs, nan);
+            try s.fmovDD(dest, dx0);
+        } else {
+            try e.settleReg(pc, k, dest);
+            // A three-operand form: the operands keep their registers.
+            try s.fop(o, dest, try e.inD(a, dx0), try e.inD(b, dx1));
+        }
         if (i.op == .binary) {
             e.alias[k + 1 - e.base] = null;
             e.known[k + 1 - e.base] = null;
@@ -866,12 +878,6 @@ const Emitter = struct {
         e.alias[k - e.base] = null;
         e.known[k - e.base] = null;
         if (fused) e.skip = true;
-        if (!safe) {
-            const refund = e.left[resume_pc - e.p.head];
-            try s.fcmp(dest, dest);
-            try s.bcond(.vs, try e.exitFrom(resume_pc, resume_pc, refund, exit_guard));
-            if (e.stress) try e.stressCheck(try e.exitFrom(resume_pc, resume_pc, refund, exit_forced));
-        }
     }
 
     // ---- Calls ----
