@@ -105,7 +105,10 @@ const commands = [_]Entry{
     .{ .name = "lremove", .f = cmdLremove },
     .{ .name = "ledit", .f = cmdLedit },
     .{ .name = "lfilter", .f = cmds.cmdLfilter },
-} ++ @import("math9.zig").commands;
+} ++ @import("math9.zig").commands ++ (if (@import("features.zig").on("coroutine")) [_]Entry{
+    .{ .name = "coroinject", .f = @import("coro.zig").cmdCoroInject },
+    .{ .name = "coroprobe", .f = @import("coro.zig").cmdCoroProbe },
+} else [_]Entry{});
 
 /// Adds the commands of the release of `it` and removes the commands of
 /// the other release. A command that a script made with the same name

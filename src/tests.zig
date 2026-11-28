@@ -1220,6 +1220,10 @@ test "coroutines and tail calls" {
         // yieldto in a namespace deleted while the coroutine waits.
         .{ "namespace eval q {}; proc q::b {} {yield 1; yieldto ::return -level 0 2}; coroutine c q::b; namespace delete q; namespace eval q {}; catch c m; set m", "yieldto called in deleted namespace" },
         .{ "proc b {} {yield 1; yieldto ::return -level 0 2}; coroutine c b; c", "2" },
+        // inject and corotype of tcl::unsupported.
+        .{ "coroutine c apply {{} {foreach i {1 2} yield}}; set ::r none; tcl::unsupported::inject c set ::r done; c; set ::r", "done" },
+        .{ "coroutine c eval {yield; yield 1; yieldto string cat 2; ::tcl::unsupported::corotype [info coroutine]}; list [c] [tcl::unsupported::corotype c] [c] [tcl::unsupported::corotype c] [c]", "1 yield 2 yieldto active" },
+        .{ "catch {tcl::unsupported::corotype set} m; set m", "can only get coroutine type of a coroutine" },
     });
 }
 

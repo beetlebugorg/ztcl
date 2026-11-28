@@ -82,6 +82,20 @@ pub const Coro = struct {
     held: u32 = 0,
     /// `Interp.ns_deletes` at the start.
     deletes_at_start: u64 = 0,
+    /// The command that suspended the coroutine: `yield` or `yieldto`.
+    suspended_by: []const u8 = "yield",
+    /// The commands of `coroinject`, last first. Each runs at the next
+    /// resume, with the name of the suspending command and the value of
+    /// the resume after its words, and its result is the next value.
+    injected: std.ArrayList([]const Value) = .empty,
+    /// The commands of `tcl::unsupported::inject`, last first. Each runs
+    /// at the next resume, with its own words only.
+    plain_injected: std.ArrayList([]const Value) = .empty,
+    /// The command of `coroprobe` while it runs in the suspended
+    /// coroutine, and its outcome.
+    probe: ?[]const Value = null,
+    probe_out: Value = Value.empty,
+    probe_err: ?Error = null,
     prev: ?*Coro = null,
     it: *Interp,
 };
@@ -434,9 +448,83 @@ pub fn hold(it: *Interp, n: i2) void {
 
 fn suspendHere(it: *Interp, c: *Coro) Error!Value {
     if (c.held > 0) return it.fail("cannot yield: C stack busy", .{});
-    swap(&c.sp, c.caller_sp);
-    if (c.killing) return it.fail("coroutine deleted", .{});
-    return c.transfer;
+    while (true) {
+        swap(&c.sp, c.caller_sp);
+        if (c.killing) return it.fail("coroutine deleted", .{});
+        // A probe runs here, and the coroutine waits again for the same
+        // resume.
+        const words = c.probe orelse break;
+        c.probe = null;
+        if (it.callWords(words)) |v| {
+            c.probe_out = v;
+            c.probe_err = null;
+        } else |e| {
+            c.probe_out = it.result;
+            c.probe_err = e;
+        }
+    }
+    while (c.plain_injected.pop()) |words| _ = try it.callWords(words);
+    var v = c.transfer;
+    while (c.injected.pop()) |words| {
+        const w = try it.alloc().alloc(Value, words.len + 2);
+        @memcpy(w[0..words.len], words);
+        w[words.len] = .{ .str = c.suspended_by };
+        w[words.len + 1] = v;
+        v = try it.callWords(w);
+    }
+    return v;
+}
+
+/// The suspended coroutine of a command name, or null.
+fn suspended(it: *Interp, name: Value) Error!?*Coro {
+    const cmd = it.findCommand(try it.str(name)) orelse return null;
+    if (cmd.impl != .native or cmd.impl.native != &resumeCmd) return null;
+    const c: *Coro = @ptrCast(@alignCast(cmd.ctx.?));
+    if (c.running or c.done) return null;
+    return c;
+}
+
+/// `coroinject coroName cmd ?arg ...?` of Tcl 9.1.
+pub fn cmdCoroInject(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 3) return it.wrongArgs("coroinject coroName cmd ?arg1 arg2 ...?");
+    const c = try suspended(it, argv[1]) orelse return it.fail("can only inject a command into a coroutine", .{});
+    try c.injected.append(it.alloc(), try it.alloc().dupe(Value, argv[2..]));
+    return Value.empty;
+}
+
+/// `coroprobe coroName cmd ?arg ...?` of Tcl 9.1: runs the command in
+/// the suspended coroutine, which stays suspended.
+pub fn cmdCoroProbe(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 3) return it.wrongArgs("coroprobe coroName cmd ?arg1 arg2 ...?");
+    const c = try suspended(it, argv[1]) orelse return it.fail("can only inject a probe command into a coroutine", .{});
+    c.probe = try it.alloc().dupe(Value, argv[2..]);
+    enter(it, c);
+    if (c.probe_err) |e| {
+        c.probe_err = null;
+        it.result = c.probe_out;
+        return e;
+    }
+    return c.probe_out;
+}
+
+/// `tcl::unsupported::inject coroName cmd ?arg ...?`: the command runs
+/// at the next resume, before the coroutine goes on.
+fn cmdInject(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 3) return it.wrongArgs("inject coroName cmd ?arg1 arg2 ...?");
+    const c = try suspended(it, argv[1]) orelse return it.fail("can only inject a command into a coroutine", .{});
+    try c.plain_injected.append(it.alloc(), try it.alloc().dupe(Value, argv[2..]));
+    return Value.empty;
+}
+
+/// `tcl::unsupported::corotype coroName`: `yield`, `yieldto`, or
+/// `active` for the running coroutine.
+fn cmdCoroType(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 2) return it.wrongArgs("corotype coroName");
+    const cmd = it.findCommand(try it.str(argv[1])) orelse return it.fail("can only get coroutine type of a coroutine", .{});
+    if (cmd.impl != .native or cmd.impl.native != &resumeCmd) return it.fail("can only get coroutine type of a coroutine", .{});
+    const c: *Coro = @ptrCast(@alignCast(cmd.ctx.?));
+    if (c.running) return .{ .str = "active" };
+    return .{ .str = c.suspended_by };
 }
 
 fn cmdYield(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -444,6 +532,7 @@ fn cmdYield(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const c = it.coro orelse return it.failCode("TCL COROUTINE ILLEGAL_YIELD", "yield can only be called in a coroutine", .{});
     c.transfer = if (argv.len == 2) argv[1] else Value.empty;
     c.many_args = false;
+    c.suspended_by = "yield";
     return suspendHere(it, c);
 }
 
@@ -457,6 +546,7 @@ fn cmdYieldTo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     words[0] = try qualified(it, words[0]);
     c.yield_words = words;
     c.many_args = true;
+    c.suspended_by = "yieldto";
     return suspendHere(it, c);
 }
 
@@ -495,6 +585,8 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         try it.register("coroutine", cmdCoroutine);
         try it.register("yield", cmdYield);
         try it.register("yieldto", cmdYieldTo);
+        try it.register("tcl::unsupported::inject", cmdInject);
+        try it.register("tcl::unsupported::corotype", cmdCoroType);
     }
     try it.register("tailcall", cmdTailcall);
 }

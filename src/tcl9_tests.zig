@@ -276,3 +276,29 @@ test "a \\u escape of each surrogate half is one character in 9.1" {
     try std.testing.expectEqualStrings("1", try run(&it, "expr {[string reverse \\uD83D\\uDE02] eq \"\\uDE02\\uD83D\"}"));
     try std.testing.expectEqualStrings("2", try run(&it, "string length [subst {\\uD83D\\uDE02}]"));
 }
+
+test "coroinject and coroprobe in 9.1" {
+    if (!tcl.coro.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqualStrings("", try run(&it, "info commands coroinject"));
+    try it.setTclVersion(.v9_1);
+    // The command put in last runs first, with the suspending command and
+    // the resume value, and its result goes on.
+    try std.testing.expectEqualStrings("{} {} {x y} {yield x B yield x A}", try run(&it,
+        \\set ::r {}
+        \\coroutine d apply {{} { lmap i {1 2} yield }}
+        \\coroinject d apply {{op val} {lappend ::r $op $val A; return $val}}
+        \\coroinject d apply {{op val} {lappend ::r $op $val B; return $val}}
+        \\list $::r [d x] [d y] $::r
+    ));
+    try std.testing.expectEqualStrings("1 {} 2 {{a b} {c d}}", try run(&it,
+        \\coroutine e apply {{} { lmap i {1 2} {yieldto string cat} }}
+        \\list [coroprobe e set i] [e a b] [coroprobe e set i] [e c d]
+    ));
+    try std.testing.expectEqualStrings("1 {} 2", try run(&it,
+        \\coroutine f apply {{} { foreach i {1 2} yield }}
+        \\list [catch {coroprobe f set}] [f] [coroprobe f set i]
+    ));
+}
