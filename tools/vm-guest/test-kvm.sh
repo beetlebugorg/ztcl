@@ -20,5 +20,10 @@ printf %s "${KERNEL:-bzImage}" > kernel.name
 "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,socket,thread "$here/test-kvm.tcl"
 # exec -vm and open "|-vm ..." (ztcl#577).
 "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,exec "$here/test-kvm-exec.tcl"
+# thread::create -isolation vm (ztcl#613): the guest of the runner, from
+# iso.cpio of pack-iso.sh, with the kernel of the other tests.
+OUT=$PWD sh "$here/pack-iso.sh" >/dev/null
+ZTCL_VM_ISO_KERNEL=$PWD/${KERNEL:-bzImage} ZTCL_VM_ISO_INITRD=$PWD/iso.cpio timeout 120 \
+    "$here/../../zig-out/bin/ztcl" --allow vm,thread,clock,event "$here/test-kvm-iso.tcl"
 # The snapshots, restores, and clones (ztcl#468).
 exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event "$here/test-kvm-snapshot.tcl"
