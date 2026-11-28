@@ -290,6 +290,12 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
     var env: std.ArrayList(u16) = .empty;
     defer env.deinit(a);
     for (env_names) |n| {
+        if (n.ptr == no_color.ptr) {
+            try env.appendSlice(a, no_color);
+            try env.appendSlice(a, std.unicode.utf8ToUtf16LeStringLiteral("=1"));
+            try env.append(a, 0);
+            continue;
+        }
         var buf: [1024]u16 = undefined;
         const len = GetEnvironmentVariableW(n.ptr, &buf, buf.len);
         if (len == 0 or len >= buf.len) continue;
@@ -398,10 +404,19 @@ fn plainToken() SpawnError!HANDLE {
     return out;
 }
 
+/// NO_COLOR=1 in each child: the child has no console (create_no_window),
+/// and with no NO_COLOR the terminal check of std sends an ioctl to the
+/// console handle of the process before the first write to stderr. In a
+/// sandbox child that call raised STATUS_INVALID_HANDLE, so the report of
+/// the leak check at the exit of a Debug build ended the process. With
+/// NO_COLOR the check reads no handle, and the report is plain text.
+const no_color = std.unicode.utf8ToUtf16LeStringLiteral("NO_COLOR");
+
 /// The variables of the environment of a child, in order.
 const env_names = [_][:0]const u16{
     std.unicode.utf8ToUtf16LeStringLiteral("APPDATA"),
     std.unicode.utf8ToUtf16LeStringLiteral("LOCALAPPDATA"),
+    no_color,
     std.unicode.utf8ToUtf16LeStringLiteral("SystemDrive"),
     std.unicode.utf8ToUtf16LeStringLiteral("SystemRoot"),
     std.unicode.utf8ToUtf16LeStringLiteral("TEMP"),

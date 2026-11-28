@@ -109,6 +109,15 @@ const Fixture = struct {
         return try std.fmt.allocPrint(a, "{s}\\s.tcl", .{f.root_w});
     }
 
+    /// Fails when the log of the child has a report of the leak check of
+    /// a Debug build at its exit, and prints the report.
+    fn expectNoLeak(f: *Fixture) !void {
+        const log = f.readRoot("log.txt") catch return;
+        if (std.mem.indexOf(u8, log, "leaked") == null) return;
+        std.debug.print("the child leaked memory:\n{s}\n", .{log});
+        return error.TestUnexpectedResult;
+    }
+
     fn readRoot(f: *Fixture, file: []const u8) ![]const u8 {
         return ev(&f.it, try std.fmt.allocPrint(f.it.alloc(), "set fh [open $base/root/{s}]; set d [read $fh]; close $fh; string trim $d", .{file}));
     }
@@ -139,6 +148,7 @@ test "isolate on Windows: the child reaches its root folder and no other folder,
     const st = c.wait(20_000) orelse return error.Timeout;
     if (st.code != 0) std.debug.print("log: {s}\n", .{f.readRoot("log.txt") catch ""});
     try t.expectEqual(@as(u32, 0), st.code);
+    try f.expectNoLeak();
     // The child wrote and read inside its root, could not read or write
     // the folder next to it, and could not start a process.
     try t.expectEqualStrings("inside 1 1 1", try f.readRoot("result.txt"));
@@ -304,6 +314,7 @@ test "isolate on Windows: the JIT runs in an AppContainer" {
     try t.expectEqual(@as(u32, 0), st.code);
     try t.expect(std.mem.indexOf(u8, log, "144") != null);
     try t.expect(std.mem.indexOf(u8, log, "jit compiled=1") != null);
+    try f.expectNoLeak();
 }
 
 const StartupInfo = extern struct {

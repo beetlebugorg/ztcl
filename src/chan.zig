@@ -699,6 +699,13 @@ pub fn closeChan(it: *Interp, c: *Channel) Error!void {
 pub fn closeAll(it: *Interp) void {
     for (it.chans.table.values()) |c| {
         flushOut(it, c) catch {};
+        // The descriptors 0, 1, and 2 of `useStdio` belong to the process,
+        // which writes to them after the interp: the report of the leak
+        // check of a Debug build goes to stderr at the exit. In a sandbox
+        // child of Windows, stdout and stderr are one handle, so a close of
+        // stdout here made that write raise STATUS_INVALID_HANDLE. A close
+        // of `stdout` by a script still closes it.
+        if (!c.mem and c.filter == null and c.wfd < 0 and c.fd >= 0 and c.fd <= 2) continue;
         closeFds(it, c);
         if (comptime proc_ok) {
             if (c.pids.len > 0) proc_mod.abandon(c);
