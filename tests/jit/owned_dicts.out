@@ -4,7 +4,7 @@
 {1 {a 1 b 2}} {a 3 b 2}
 2 {a 1 b 2 z 2} 1
 {0 1 read read 2 read read 3} {a 3}
-1 {key "nosuch" not known in dictionary} NONE 0 1 {unmatched open brace in dict}
+1 {key "nosuch" not known in dictionary} {TCL LOOKUP DICT nosuch} 0 1 {unmatched open brace in dict}
 5 1 0 3
 1 {missing value to go with key} 0 1 {missing value to go with key}
 2 1 2
