@@ -1906,6 +1906,21 @@ test "socket accepts only loopback addresses by default" {
     try std.testing.expectEqualStrings("127.0.0.1 {got hello} stdout", try it.str(try it.eval(script)));
 }
 
+test "a redirection of an isolated exec needs the file capability, also with a root" {
+    if (!tcl.proc.supported or @import("builtin").os.tag != .linux) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    // A root folder and no `file`: the check runs at the parse of the
+    // pipeline, before a guest starts.
+    try it.allow(@backingInt(cap.exec) | @backingInt(cap.vm));
+    it.exec_host = .{ .allow = &.{ "echo", "/usr/bin/cat" }, .timeout_ms = 5000, .env = &.{"PATH=/usr/bin:/bin"} };
+    try tcl.fsroot.setRoot(&it, ".");
+    try std.testing.expectEqualStrings("ZTCL EXEC POLICY", try it.str(try it.eval("catch {exec -isolation vm cat < build.zig} m o; dict get $o -errorcode")));
+    try std.testing.expectEqualStrings("ZTCL EXEC POLICY", try it.str(try it.eval("catch {exec -isolation vm echo a > x.txt} m o; dict get $o -errorcode")));
+}
+
 test "exec has an allowlist and a time limit, and leaves no process" {
     if (!tcl.proc.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     const linux = tcl.sys.os;

@@ -439,7 +439,7 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
             t = .{ .owned = try memFile(it, arg) };
         } else if (f[f.len - 1] == '@') {
             t = .{ .fd = try chanFd(it, arg, !is_in) };
-        } else if (plan.isolated and !it.fs_ok()) {
+        } else if (plan.isolated and (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())) {
             return it.failCode("ZTCL EXEC POLICY", "couldn't open file \"{s}\": a redirection of an isolated exec needs the file capability", .{arg});
         } else if (is_in) {
             t = .{ .owned = try openFile(it, arg, .{}, "read") };
