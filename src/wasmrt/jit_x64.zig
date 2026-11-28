@@ -1,4 +1,4 @@
-//! The JIT tier of the wasm engine on x86-64 (System V: Linux and macOS).
+//! The JIT tier of the wasm engine on x86-64 (System V code, also on Windows).
 //!
 //! The compiler reads the internal code of `module.zig` once for each
 //! module and writes the machine code of all its functions into one
@@ -39,7 +39,11 @@ const Reg = x64.Reg;
 const Mem = x64.Mem;
 const Label = x64.Label;
 
-pub const supported = builtin.cpu.arch == .x86_64 and (builtin.os.tag == .linux or builtin.os.tag == .macos);
+pub const supported = builtin.cpu.arch == .x86_64 and (builtin.os.tag == .linux or builtin.os.tag == .macos or builtin.os.tag == .windows);
+/// The calling convention of the entry and the helpers: System V on each
+/// system, as the code of the compiler is (`jit.cc` of the Tcl JIT). On
+/// Windows Zig saves rsi, rdi, and xmm6 to xmm15 around such a call.
+const jcc = @import("../jit.zig").cc;
 
 pub const Ctx = extern struct {
     st_base: u64 = 0,
@@ -73,7 +77,7 @@ const off = struct {
 
 /// The code of one module.
 pub const Code = struct {
-    entry: *const fn (ctx: *Ctx, f: usize) callconv(.c) u64,
+    entry: *const fn (ctx: *Ctx, f: usize) callconv(jcc) u64,
     funcs: []usize,
 };
 
@@ -141,7 +145,7 @@ fn refresh(c: *Ctx) void {
 }
 
 /// Runs one instruction of `exec.simple` on the slots of the frame.
-fn hSimple(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(.c) u64 {
+fn hSimple(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(jcc) u64 {
     const s = storeOf(c);
     const fp: usize = @intCast(frame_off / 8);
     defer refresh(c);
@@ -150,7 +154,7 @@ fn hSimple(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(.c) u6
 }
 
 /// Makes room for `need` slots from the frame.
-fn hGrow(c: *Ctx, frame_off: u64, need: u64) callconv(.c) u64 {
+fn hGrow(c: *Ctx, frame_off: u64, need: u64) callconv(jcc) u64 {
     const s = storeOf(c);
     defer refresh(c);
     s.ensureStack(@intCast(frame_off / 8 + need)) catch |e| return codeOf(e);
@@ -158,7 +162,7 @@ fn hGrow(c: *Ctx, frame_off: u64, need: u64) callconv(.c) u64 {
 }
 
 /// Calls an imported function, as the interpreter does.
-fn hCall(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(.c) u64 {
+fn hCall(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(jcc) u64 {
     const s = storeOf(c);
     defer refresh(c);
     const addr = instOf(c).funcs[ins.a];
@@ -195,7 +199,7 @@ fn callOther(s: *exec.Store, addr: u32, top: usize) exec.Error!void {
 
 /// `call_indirect`: gives 0 after a call through the store, a trap code
 /// below 64, or the address of the code of a function of this instance.
-fn hIndirect(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(.c) u64 {
+fn hIndirect(c: *Ctx, frame_off: u64, ins: *const mod.Ins, h: u64) callconv(jcc) u64 {
     const s = storeOf(c);
     defer refresh(c);
     const inst = instOf(c);
