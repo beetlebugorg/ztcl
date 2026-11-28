@@ -254,3 +254,27 @@ test "teardown while a thread sends to the host" {
     try teardown("thread::create [list thread::send [thread::id] {while 1 {}}]; for {set i 0} {$i < 200000} {incr i} {}");
     try teardown("for {set i 0} {$i < 8} {incr i} {thread::create [list while 1 [list thread::send -async [thread::id] {set y 1}]]}; for {set i 0} {$i < 200000} {incr i} {}");
 }
+
+var hook_calls = std.atomic.Value(u32).init(0);
+fn countHook(ctx: ?*anyopaque) void {
+    _ = ctx;
+    _ = hook_calls.fetchAdd(1, .acq_rel);
+}
+
+test "the message hook of the embedder runs for each message to its thread" {
+    if (!thread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    defer it.deinit();
+    hook_calls.store(0, .release);
+    try testing.expect(thread.setMessageHook(&it, countHook, null));
+    const id = try thread.create(&it, "", false, false);
+    // The thread sends to the host, which waits in no loop of ztcl: the
+    // hook is the only wake that an embedder loop gets.
+    const me = try std.fmt.allocPrint(it.alloc(), "thread::send -async tid0x{x} {{set ::got 1}}", .{it.worker.?.id});
+    _ = try thread.sendWait(&it, id, me, false);
+    try testing.expect(hook_calls.load(.acquire) >= 1);
+    _ = try thread.serve(&it, 64);
+    try testing.expectEqualStrings("1", try it.str(try it.eval("set ::got")));
+    try testing.expect(thread.setMessageHook(&it, null, null));
+}
