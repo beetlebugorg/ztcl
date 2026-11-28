@@ -1,23 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::agent
-syn: ztcl::agent subcommand ?arg ...?
-does: Runs an LLM agent loop in an isolated thread with no capability, which holds only the data and the tools that the host gives it. The host posts each request to its one endpoint with its own headers, runs only its own tools, and checks the result against a schema. Load it with `package require ztcl::agent`.
-cap: thread
-flags: --allow thread
-page: modules/agent.md
-sub: ztcl::agent run ?-option value ...? | Runs the loop. Gives a dict of the result, the log, and the counts.
-sub: ztcl::agent doc NAME TEXT ?ARG TYPE ...? | Sets the text of the tool NAME and the types of its arguments.
-sub: ztcl::agent describe NAME | The spec of the command NAME as a tool: name, text, JSON schema, and parameters.
-sub: ztcl::agent check SCHEMA VALUE | VALUE when it matches the result schema SCHEMA, else the error `ZTCL AGENT RESULT`.
-sub: ztcl::agent schema SCHEMA | The JSON schema of a result schema.
-sub: ztcl::agent post URL HEADERS BODY | One HTTP/1.1 POST of a JSON body. Gives `status N body TEXT`.
-ex: package require ztcl::agent; ztcl::agent check {n int tags {list string}} {n 3 tags {a b}} => n 3 tags {a b}
-ex: catch {ztcl::agent check {kind {enum a b}} {kind c}} msg; set msg => result.kind is not enum a b
-ex: proc greet {name {times 1}} {}; lindex [ztcl::agent describe greet] 3 => {name required} {times optional}
-ex: ztcl::agent schema {n int} => {"type":"object","properties":{"n":{"type":"integer"}},"required":["n"],"additionalProperties":false}
-
 == ztcl::pdf
 syn: ztcl::pdf subcommand ?arg ...?
 does: Makes a PDF document: pages, text in embedded TrueType fonts, rectangles, lines, images, links, named places, the outline, and the document information.
