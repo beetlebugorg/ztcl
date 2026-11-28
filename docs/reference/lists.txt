@@ -1,44 +1,5 @@
 # The command reference: lists. The format is in docs/reference/README.md.
 
-== lseq
-syn: lseq count
-syn: lseq start ?to|..? end ??by? step?
-syn: lseq start count count ??by? step?
-does: A list of numbers from start, each one step more than the one before. With an end, the list stops at the last number that does not pass end. The default step is 1, or -1 when end is less than start. With doubles, each number is rounded to the most decimal places of the arguments.
-tcl: 9.1
-ex: lseq 5 => 0 1 2 3 4
-ex: lseq 1 to 9 by 3 => 1 4 7
-ex: lseq 10 count 3 => 10 11 12
-ex: lseq 0 1 0.25 => 0.0 0.25 0.5 0.75 1.0
-err: lseq x | expected number but got "x"
-diff: tclsh 9.1 makes a list that computes each element when a script reads it, so a long series uses little memory. ztcl makes the whole list, with the list limit of `lrepeat`.
-
-== lpop
-syn: lpop listVar ?index ...?
-does: Takes an element out of the list in a variable and gives it. The default index is `end`. More indexes go into nested lists.
-tcl: 9.1
-ex: set l {a b c}; list [lpop l] $l => c {a b}
-ex: set l {{a b} c}; list [lpop l 0 0] $l => a {b c}
-err: set l {}; lpop l | index "end" out of range
-
-== lremove
-syn: lremove list ?index ...?
-does: The list without the elements at the indexes. An index past the end has no effect.
-tcl: 9.1
-ex: lremove {a b c d} 1 end => a c
-
-== ledit
-syn: ledit listVar first last ?element ...?
-does: Replaces the elements from first to last of the list in a variable with the new elements, as `lreplace` does, and gives the new list.
-tcl: 9.1
-ex: set l {a b c d}; ledit l 1 2 X => a X d
-
-== lfilter
-syn: lfilter varList list ?varList list ...? command
-does: Runs the command once for each element, as `foreach` does, and gives the values of the first variable for the passes where the command gives true.
-tcl: 9.1
-ex: lfilter x {1 2 3 4} {expr {$x % 2 == 0}} => 2 4
-
 == lmap
 syn: lmap varList list ?varList list ...? command
 does: Runs the command for each element, as `foreach` does, and gives a list of the results. A `continue` leaves out that element.
