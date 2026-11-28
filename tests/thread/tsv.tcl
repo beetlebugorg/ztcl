@@ -61,7 +61,8 @@ test lreplace-1 {tsv::lreplace l x 0 1 Z; tsv::get l x} {Z q b {c d} r}
 test lreplace-2 {tsv::lreplace l x 0 0} {}
 test lset-1 {tsv::set l y {a {b c} d}; tsv::lset l y 1 0 X} {a {X c} d}
 test lset-2 {tsv::lset l y 2 Y} {a {X c} Y}
-test lset-3 {tsv::lset l y 9 Y} {!list index out of range}
+# Tcl 9 names the index in the message of lset, and Tcl 8.6 does not.
+test lset-3 {tsv::lset l y 9 Y} [expr {[package vsatisfies [info patchlevel] 9-] ? {!index "9" out of range} : {!list index out of range}}]
 test lpop-1 {tsv::set l z {a b c d}; tsv::lpop l z} a
 test lpop-2 {tsv::lpop l z end} d
 test lpop-3 {tsv::get l z} {b c}
