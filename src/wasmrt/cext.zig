@@ -223,6 +223,7 @@ fn extra(a: Arg) usize {
     return switch (a.kind) {
         0 => a.len,
         3 => blk: {
+            if (a.len == 0) break :blk 0;
             const items: [*]const Arg = @ptrFromInt(@as(usize, @intCast(a.bits)));
             var n: usize = 16 * a.len;
             for (items[0..a.len]) |e| n += extra(e);
@@ -239,16 +240,22 @@ fn writeArg(m: []u8, at: usize, a: Arg, off_in: usize) usize {
     var bits = a.bits;
     switch (a.kind) {
         0 => {
-            const src: [*]const u8 = @ptrFromInt(@as(usize, @intCast(a.bits)));
-            if (a.len > 0) @memcpy(m[off .. off + a.len], src[0..a.len]);
+            // An empty text can have the address 0, as the result of a
+            // `break` or a `continue` has.
+            if (a.len > 0) {
+                const src: [*]const u8 = @ptrFromInt(@as(usize, @intCast(a.bits)));
+                @memcpy(m[off .. off + a.len], src[0..a.len]);
+            }
             bits = off;
             off += a.len;
         },
         3 => {
-            const items: [*]const Arg = @ptrFromInt(@as(usize, @intCast(a.bits)));
             const recs = off;
-            off += 16 * a.len;
-            for (items[0..a.len], 0..) |e, i| off = writeArg(m, recs + 16 * i, e, off);
+            if (a.len > 0) {
+                const items: [*]const Arg = @ptrFromInt(@as(usize, @intCast(a.bits)));
+                off += 16 * a.len;
+                for (items[0..a.len], 0..) |e, i| off = writeArg(m, recs + 16 * i, e, off);
+            }
             bits = recs;
         },
         else => {},
@@ -397,4 +404,15 @@ pub fn init(p: *Pkg, name: []const u8) exec.Error!?InitResult {
     const a = try fromPkg(p, r & 0xffff_ffff, 0);
     const v = zside.valueOf(p.it, a) catch return error.OutOfMemory;
     return .{ .code = code, .text = p.it.str(v) catch return error.OutOfMemory };
+}
+
+test "writeArg takes an empty text or list with the address 0 (#778)" {
+    // The result of `break` in an eval is an empty text with no address.
+    var m: [64]u8 = @splat(0xAA);
+    const end = writeArg(&m, 0, .{ .kind = 0, .len = 0, .bits = 0 }, 32);
+    try std.testing.expectEqual(@as(usize, 32), end);
+    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, m[4..8], .little));
+    try std.testing.expectEqual(@as(u64, 32), std.mem.readInt(u64, m[8..16], .little));
+    try std.testing.expectEqual(@as(usize, 0), extra(.{ .kind = 3, .len = 0, .bits = 0 }));
+    try std.testing.expectEqual(@as(usize, 32), writeArg(&m, 16, .{ .kind = 3, .len = 0, .bits = 0 }, 32));
 }
