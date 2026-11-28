@@ -624,7 +624,7 @@ pub fn Tcl_Format(ip: ?*Interp, fmt: [*:0]const u8, objc: c_int, objv: ?[*]const
 /// Reads the C arguments of the conversions of `fmt` from `ap` into
 /// objects, as `format` reads them: an int, a long, a long long, a
 /// double, or the text of a `char *`.
-fn printfArgs(list: *std.ArrayList(*Obj), fmt_z: [*:0]const u8, ap: *std.builtin.VaList) callconv(.c) void {
+fn printfArgs(list: *std.ArrayList(*Obj), fmt_z: [*:0]const u8, ap: *obj.va.VaList) callconv(.c) void {
     const fmt = std.mem.span(fmt_z);
     var i: usize = 0;
     while (i < fmt.len) {
@@ -643,14 +643,14 @@ fn printfArgs(list: *std.ArrayList(*Obj), fmt_z: [*:0]const u8, ap: *std.builtin
         if (di > i and di < fmt.len and fmt[di] == '$') i = di + 1;
         while (i < fmt.len and std.mem.indexOfScalar(u8, "-+ 0#", fmt[i]) != null) i += 1;
         if (i < fmt.len and fmt[i] == '*') {
-            push(list, obj.Tcl_NewIntObj(@cVaArg(ap, c_int)));
+            push(list, obj.Tcl_NewIntObj(obj.va.arg(ap, c_int)));
             i += 1;
         } else while (i < fmt.len and std.ascii.isDigit(fmt[i])) i += 1;
         var prec: ?usize = null;
         if (i < fmt.len and fmt[i] == '.') {
             i += 1;
             if (i < fmt.len and fmt[i] == '*') {
-                const p = @cVaArg(ap, c_int);
+                const p = obj.va.arg(ap, c_int);
                 push(list, obj.Tcl_NewIntObj(p));
                 prec = @intCast(@max(p, 0));
                 i += 1;
@@ -669,7 +669,7 @@ fn printfArgs(list: *std.ArrayList(*Obj), fmt_z: [*:0]const u8, ap: *std.builtin
         i += 1;
         switch (conv) {
             's' => {
-                const p = @cVaArg(ap, ?[*:0]const u8) orelse {
+                const p = obj.va.arg(ap, ?[*:0]const u8) orelse {
                     push(list, obj.Tcl_NewObj());
                     continue;
                 };
@@ -677,14 +677,14 @@ fn printfArgs(list: *std.ArrayList(*Obj), fmt_z: [*:0]const u8, ap: *std.builtin
                 // and can end without a 0.
                 push(list, obj.Tcl_NewStringObj(p, @intCast(cLen(p, prec orelse std.math.maxInt(usize)))));
             },
-            'c' => push(list, obj.Tcl_NewIntObj(@cVaArg(ap, c_int))),
+            'c' => push(list, obj.Tcl_NewIntObj(obj.va.arg(ap, c_int))),
             // An unsigned conversion reads a signed value of the same size.
             'd', 'i', 'u', 'o', 'x', 'X', 'b' => push(list, switch (longs) {
-                0 => obj.Tcl_NewIntObj(@cVaArg(ap, c_int)),
-                1 => obj.Tcl_NewWideIntObj(@cVaArg(ap, c_long)),
-                else => obj.Tcl_NewWideIntObj(@cVaArg(ap, c_longlong)),
+                0 => obj.Tcl_NewIntObj(obj.va.arg(ap, c_int)),
+                1 => obj.Tcl_NewWideIntObj(obj.va.arg(ap, c_long)),
+                else => obj.Tcl_NewWideIntObj(obj.va.arg(ap, c_longlong)),
             }),
-            'e', 'E', 'f', 'g', 'G' => push(list, obj.Tcl_NewDoubleObj(@cVaArg(ap, f64))),
+            'e', 'E', 'f', 'g', 'G' => push(list, obj.Tcl_NewDoubleObj(obj.va.arg(ap, f64))),
             else => {},
         }
     }
@@ -695,7 +695,7 @@ fn push(list: *std.ArrayList(*Obj), o: *Obj) void {
     list.append(gpa, o) catch panicText("out of memory");
 }
 
-fn appendPrintf(o: *Obj, fmt: [*:0]const u8, ap: *std.builtin.VaList) void {
+fn appendPrintf(o: *Obj, fmt: [*:0]const u8, ap: *obj.va.VaList) void {
     var list: std.ArrayList(*Obj) = .empty;
     defer {
         for (list.items) |e| obj.decr(e);
@@ -719,19 +719,42 @@ fn appendPrintf(o: *Obj, fmt: [*:0]const u8, ap: *std.builtin.VaList) void {
     obj.appendText(o, out);
 }
 
-pub fn Tcl_AppendPrintfToObj(o: *Obj, fmt: [*:0]const u8, ...) callconv(.c) void {
+pub const Tcl_AppendPrintfToObj = if (obj.va.own) obj.va.Stub(2, "ztcl_va_AppendPrintfToObj").f else appendPrintfToObj;
+
+fn appendPrintfToObj(o: *Obj, fmt: [*:0]const u8, ...) callconv(.c) void {
     if (o.refCount > 1) panicText("Tcl_AppendPrintfToObj called with shared object");
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     appendPrintf(o, fmt, &ap);
 }
 
-pub fn Tcl_ObjPrintf(fmt: [*:0]const u8, ...) callconv(.c) *Obj {
+pub const Tcl_ObjPrintf = if (obj.va.own) obj.va.Stub(1, "ztcl_va_ObjPrintf").f else objPrintf;
+
+fn objPrintf(fmt: [*:0]const u8, ...) callconv(.c) *Obj {
     const o = obj.Tcl_NewObj();
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     appendPrintf(o, fmt, &ap);
     return o;
+}
+
+/// The bodies of the variadic entry points of aarch64 Linux (`va.zig`).
+fn appendPrintfToObjVA(o: *Obj, fmt: [*:0]const u8, ap: *obj.va.VaList) callconv(.c) void {
+    if (o.refCount > 1) panicText("Tcl_AppendPrintfToObj called with shared object");
+    appendPrintf(o, fmt, ap);
+}
+
+fn objPrintfVA(fmt: [*:0]const u8, ap: *obj.va.VaList) callconv(.c) *Obj {
+    const o = obj.Tcl_NewObj();
+    appendPrintf(o, fmt, ap);
+    return o;
+}
+
+comptime {
+    if (obj.va.own) {
+        obj.va.exportBody(&appendPrintfToObjVA, "ztcl_va_AppendPrintfToObj");
+        obj.va.exportBody(&objPrintfVA, "ztcl_va_ObjPrintf");
+    }
 }
 
 pub fn Tcl_AppendLimitedToObj(o: *Obj, bytes: ?[*]const u8, length: c_int, limit: c_int, ellipsis: ?[*:0]const u8) callconv(.c) void {

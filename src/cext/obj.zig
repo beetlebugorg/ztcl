@@ -25,12 +25,15 @@ const std = @import("std");
 /// A `va_list` argument of a slot, as C passes it. Where `va_list` is a
 /// pointer (wasm32, Windows, macOS on arm64), C passes it by value. Where
 /// it is a struct (x86_64 and aarch64 elsewhere), C passes its address.
-pub const VaArg = if (@typeInfo(std.builtin.VaList) == .pointer) std.builtin.VaList else *std.builtin.VaList;
+/// On aarch64 Linux, `va.zig` has the `va_list` of AAPCS64, a struct.
+pub const VaArg = if (va.own) *va.VaList else if (@typeInfo(std.builtin.VaList) == .pointer) std.builtin.VaList else *std.builtin.VaList;
 
-/// The `VaList` of `ap.*`, for `@cVaArg`.
-pub inline fn vaList(ap: *VaArg) *std.builtin.VaList {
-    return if (VaArg == std.builtin.VaList) ap else ap.*;
+/// The `VaList` of `ap.*`, for `va.arg`.
+pub inline fn vaList(ap: *VaArg) *va.VaList {
+    return if (VaArg == va.VaList) ap else ap.*;
 }
+
+pub const va = @import("va.zig");
 const value = @import("../value.zig");
 
 const gpa = std.heap.c_allocator;
@@ -712,7 +715,9 @@ pub fn Tcl_AppendObjToObj(o: *Obj, other: *Obj) callconv(.c) void {
     appendText(o, s);
 }
 
-pub fn Tcl_AppendStringsToObj(o: *Obj, ...) callconv(.c) void {
+pub const Tcl_AppendStringsToObj = if (va.own) va.Stub(1, "ztcl_va_AppendStringsToObj").f else appendStringsToObj;
+
+fn appendStringsToObj(o: *Obj, ...) callconv(.c) void {
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     while (true) {
@@ -795,7 +800,9 @@ pub fn ownResult(ip: *Interp) *Obj {
     return r;
 }
 
-pub fn Tcl_AppendResult(ip: *Interp, ...) callconv(.c) void {
+pub const Tcl_AppendResult = if (va.own) va.Stub(1, "ztcl_va_AppendResult").f else appendResult;
+
+fn appendResult(ip: *Interp, ...) callconv(.c) void {
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     const r = ownResult(ip);
@@ -805,12 +812,12 @@ pub fn Tcl_AppendResult(ip: *Interp, ...) callconv(.c) void {
     }
 }
 
-pub fn Tcl_AppendResultVA(ip: *Interp, va: VaArg) callconv(.c) void {
-    var arg = va;
+pub fn Tcl_AppendResultVA(ip: *Interp, list: VaArg) callconv(.c) void {
+    var arg = list;
     const ap = vaList(&arg);
     const r = ownResult(ip);
     while (true) {
-        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        const p = va.arg(ap, ?[*:0]const u8) orelse break;
         appendText(r, std.mem.span(p));
     }
 }
@@ -1144,11 +1151,11 @@ pub fn Tcl_SetByteArrayLength(o: *Obj, length: c_int) callconv(.c) [*]u8 {
     return r.data.items.ptr;
 }
 
-pub fn Tcl_AppendStringsToObjVA(o: *Obj, va: VaArg) callconv(.c) void {
-    var arg = va;
+pub fn Tcl_AppendStringsToObjVA(o: *Obj, list: VaArg) callconv(.c) void {
+    var arg = list;
     const ap = vaList(&arg);
     while (true) {
-        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        const p = va.arg(ap, ?[*:0]const u8) orelse break;
         appendText(o, std.mem.span(p));
     }
 }
@@ -1241,4 +1248,15 @@ pub var panic_hook: ?*const fn ([]const u8) void = null;
 pub fn panicText(msg: []const u8) noreturn {
     if (panic_hook) |h| h(msg);
     @panic(msg);
+}
+
+comptime {
+    if (va.own) {
+        va.exportBody(&Tcl_AppendResultVA, "ztcl_va_AppendResult");
+        va.exportBody(&Tcl_AppendStringsToObjVA, "ztcl_va_AppendStringsToObj");
+    }
+}
+
+test {
+    _ = va;
 }

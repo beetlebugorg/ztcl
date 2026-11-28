@@ -91,16 +91,18 @@ pub fn Tcl_SetObjErrorCode(ip: *Interp, o: *Obj) callconv(.c) void {
     setCode(ip, o);
 }
 
-fn errorCodeOf(ap: *std.builtin.VaList) callconv(.c) *Obj {
+fn errorCodeOf(ap: *obj.va.VaList) callconv(.c) *Obj {
     const l = obj.Tcl_NewListObj(0, null);
     while (true) {
-        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        const p = obj.va.arg(ap, ?[*:0]const u8) orelse break;
         _ = obj.Tcl_ListObjAppendElement(null, l, newText(std.mem.span(p)));
     }
     return l;
 }
 
-pub fn Tcl_SetErrorCode(ip: *Interp, ...) callconv(.c) void {
+pub const Tcl_SetErrorCode = if (obj.va.own) obj.va.Stub(1, "ztcl_va_SetErrorCode").f else setErrorCode;
+
+fn setErrorCode(ip: *Interp, ...) callconv(.c) void {
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     setCode(ip, errorCodeOf(&ap));
@@ -420,4 +422,10 @@ pub fn Tcl_BackgroundException(ip: *Interp, code: c_int) callconv(.c) void {
     ip.err_code = saved_code;
     ip.err_info = saved_info;
     ip.error_line_dont_use = saved_line;
+}
+
+comptime {
+    if (obj.va.own) {
+        obj.va.exportBody(&Tcl_SetErrorCodeVA, "ztcl_va_SetErrorCode");
+    }
 }
