@@ -1047,7 +1047,8 @@ proc refdoc::convert {runner name {remove 0}} {
     foreach line [{*}$v sub] {
         lassign [split_sub $line] syn text
         set words [split $syn]
-        set key [expr {[llength $words] > 1 ? [lindex $words 1] : [lindex $words 0]}]
+        # A subcommand of a module has no command name in front.
+        set key [expr {[llength $words] > 1 && [lindex $words 0] eq $name ? [lindex $words 1] : [lindex $words 0]}]
         dict lappend groups $key [list $syn $text]
     }
     dict for {key lines} $groups {
@@ -1083,7 +1084,7 @@ proc refdoc::convert {runner name {remove 0}} {
             } elseif {$k in {sub err}} {
                 set parts [split_sub $val]
             } elseif {$k eq "ex"} {
-                regexp {^(.*?) =>(?: (.*))?$} $val -> c r
+                if {![regexp {^(.*?) =>(?: (.*))?$} $val -> c r]} { set c $val; set r "" }
                 set parts [list [string trim $c] $r]
             } else {
                 set parts [list $val]
@@ -1091,7 +1092,7 @@ proc refdoc::convert {runner name {remove 0}} {
             foreach p $parts {
                 set p [regsub {\s*Tcl (9\.1|8\.6) only\.$} $p ""]
                 foreach w [expr {$k in {flags names} ? [split $p] : [list $p]}] {
-                    if {[string first $w $have] < 0} { lappend lost $w }
+                    if {$w ne "" && [string first $w $have] < 0} { lappend lost $w }
                 }
             }
         }
