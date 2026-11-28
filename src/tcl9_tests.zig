@@ -365,3 +365,9 @@ test "the messages of an operand of the wrong type name the value and the side i
         .{ "catch {expr {\"\" + 1}} m; set m", "can't use empty string as operand of \"+\"", "cannot use non-numeric string \"\" as left operand of \"+\"" },
     });
 }
+
+test "file pathtype of a path with a leading ~: Tcl 8.6 expands it, Tcl 9.1 does not" {
+    try check(@backingInt(cap.file), &.{
+        .{ "lmap p {~ ~/a ~nobody a/~} {file pathtype $p}", "absolute absolute absolute relative", "relative relative relative relative" },
+    });
+}

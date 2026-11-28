@@ -485,6 +485,9 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         // In host mode on Windows, as in tclsh: a drive or a share is
         // absolute, and `/a` is on the volume of the current folder.
         if (fsroot.hostPrefix(it, p) != null) return .{ .str = "absolute" };
+        // Tcl 8.6 expands a leading `~` to a home folder, so the path is
+        // absolute. Tcl 9 has no expansion of `~`.
+        if (!it.tcl9() and p.len > 0 and p[0] == '~') return .{ .str = "absolute" };
         if (it.fs.host and @import("builtin").os.tag == .windows and p.len > 0 and p[0] == '/') return .{ .str = "volumerelative" };
         return .{ .str = if (p.len > 0 and p[0] == '/') "absolute" else "relative" };
     }

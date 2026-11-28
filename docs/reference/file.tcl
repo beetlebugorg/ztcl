@@ -131,17 +131,17 @@ command file {
     subcommand pathtype {
         synopsis {file pathtype NAME}
         summary {Gives the kind of a path: absolute, relative, or volumerelative.}
-        description {Gives `absolute` for a path that starts with `/`, and `relative` for the others. A `~` has no meaning: `~` is relative. In host mode on Windows, a path with a drive such as `C:/a` is `absolute`, and `/a` is `volumerelative`, as in tclsh.}
+        description {Gives `absolute` for a path that starts with `/`, and `relative` for the others. With `--tcl 8.6`, a path that starts with `~` is `absolute`, since Tcl 8.6 expands `~` to a home folder. With `--tcl 9.1`, a `~` has no meaning, and `~` is relative. In host mode on Windows, a path with a drive such as `C:/a` is `absolute`, and `/a` is `volumerelative`, as in tclsh.}
         returns {absolute, relative, or volumerelative.}
         see {{file normalize} {file join}}
-        difference {Tcl 8.6.16 gives `absolute` for `file pathtype ~`, since it expands `~` to the home folder ([issue 684](https://github.com/beetlebugorg/ztcl/issues/684)).}
         argument NAME {
             type path
             summary {The path.}
         }
         example {file pathtype a/b} relative
         example {file pathtype /a} absolute
-        example {file pathtype ~} relative
+        example {file pathtype ~} absolute -tcl 8.6
+        example {file pathtype ~} relative -tcl 9.1
         error {file pathtype} {wrong # args: should be "file pathtype name"} {TCL WRONGARGS}
     }
 
