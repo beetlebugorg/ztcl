@@ -78,7 +78,7 @@ pub const Refl = struct {
 };
 
 fn of(f: *chan.Filter) *Refl {
-    return @fieldParentPtr("filter", f);
+    return @alignCast(@fieldParentPtr("filter", f));
 }
 
 fn fRead(f: *chan.Filter, it: *Interp, _: i32, buf: []u8) Error!usize {
