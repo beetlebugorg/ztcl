@@ -528,6 +528,8 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             for (it.namespaces.keys(), 0..) |k, i| {
                 if (eql(k, space) or std.mem.startsWith(u8, k, prefix)) try drop.append(a, i);
             }
+            it.ns_deletes += 1;
+            for (drop.items) |i| try it.ns_gone.put(a, try a.dupe(u8, it.namespaces.keys()[i]), it.ns_deletes);
             try it.namespaces.orderedRemoveAtMany(a, drop.items);
             var gone: std.ArrayList([]const u8) = .empty;
             var iter = it.commands.keyIterator();

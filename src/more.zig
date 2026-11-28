@@ -186,10 +186,6 @@ const SortCtx = struct {
         };
         return std.math.order(n, 0);
     }
-
-    fn less(c: *SortCtx, x: Key, y: Key) bool {
-        return c.order(x, y) == .lt;
-    }
 };
 
 /// The order of `lsort -dictionary`: case does not count except as a
@@ -238,8 +234,10 @@ fn mergeSort(keys: []Key, tmp: []Key, ctx: *SortCtx) void {
     var i: usize = 0;
     var j: usize = mid;
     for (keys) |*k| {
-        // The right element goes first only when it is less.
-        if (j < keys.len and (i >= mid or ctx.less(tmp[j], tmp[i]))) {
+        // The right element goes first only when the left one is
+        // greater. A compare command gets the left element first, as in
+        // Tcl, so a command that gives 1 for each pair reverses two.
+        if (j < keys.len and (i >= mid or ctx.order(tmp[i], tmp[j]) == .gt)) {
             k.* = tmp[j];
             j += 1;
         } else {
@@ -339,6 +337,10 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // A merge sort with its buffer in the arena: it is stable, as the
     // sort of Tcl is, and a compare command that sorts again uses
     // little native stack.
+    // The compare command runs on the native stack of lsort: a coroutine
+    // cannot yield in it, as in Tcl.
+    @import("coro.zig").hold(it, 1);
+    defer @import("coro.zig").hold(it, -1);
     mergeSort(keys, try it.alloc().alloc(Key, keys.len), &ctx);
     if (ctx.err) |e| return e;
     var out: std.ArrayList(Value) = .empty;

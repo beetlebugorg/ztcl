@@ -1208,6 +1208,18 @@ test "coroutines and tail calls" {
         .{ "proc g {} {catch {yield 1}; set ::after 1}; coroutine c g; rename c {}; info exists ::after", "0" },
         .{ "proc r {n} {r [incr n]}; catch {coroutine c r 0} m; set m", "too many nested evaluations (infinite loop?)" },
         .{ "proc f {n a} {if {$n == 0} {return $a}; tailcall f [expr {$n-1}] [expr {$a+1}]}; f 5000 0", "5000" },
+        // A yield in the compare command of lsort fails, and lsort calls
+        // the command with the left element first.
+        .{ "proc f {a b} {catch yield; return 1}; coroutine c lsort -command f {a b}", "b a" },
+        .{ "proc f {a b} {catch yield m; return $m}; catch {coroutine c lsort -command f {a b}} m; set m", "-compare command returned non-integer result" },
+        // The end of the command goes out with its code.
+        .{ "set r {}; foreach k {0 1 2 3 4 5} {lappend r [catch {coroutine c return -level 0 -code $k}]}; set r", "0 1 2 3 4 5" },
+        // The command resolves in the namespace of `coroutine`.
+        .{ "proc a {} {return global}; namespace eval b {proc a {} {return local}}; namespace eval b {coroutine c a}", "local" },
+        .{ "proc a {} {info coroutine}; proc b {} {rename [info coroutine] {}; a}; coroutine c b", "" },
+        // yieldto in a namespace deleted while the coroutine waits.
+        .{ "namespace eval q {}; proc q::b {} {yield 1; yieldto ::return -level 0 2}; coroutine c q::b; namespace delete q; namespace eval q {}; catch c m; set m", "yieldto called in deleted namespace" },
+        .{ "proc b {} {yield 1; yieldto ::return -level 0 2}; coroutine c b; c", "2" },
     });
 }
 
