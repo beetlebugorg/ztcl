@@ -584,9 +584,15 @@ pub fn removeAt(p: Parent, dir: bool) ?sys.Errno {
 
 /// Makes a folder at the last name of a parent.
 pub fn mkdirAt(p: Parent) ?sys.Errno {
+    return mkdirAtMode(p, 0o777);
+}
+
+/// `mkdirAt` with the mode of the new folder on Linux and macOS, such as
+/// 0o700 for a folder of one user. Windows and WASI have no mode.
+pub fn mkdirAtMode(p: Parent, mode: u16) ?sys.Errno {
     if (comptime on_win) return win.mkdirAt(p);
     if (comptime on_wasi) return wfs.mkdirAt(p);
-    const e = linux.errno(linux.mkdirat(p.fd, p.base, 0o777));
+    const e = linux.errno(linux.mkdirat(p.fd, p.base, mode));
     return if (e == .SUCCESS) null else e;
 }
 

@@ -4154,3 +4154,20 @@ test "an error in a literal body of for or try has its line in the script, for t
         try std.testing.expectEqualStrings(c.trace, try it.str(it.last_info));
     }
 }
+
+test "file home, file tildeexpand, and file tempdir of Tcl 9.1 in the root folder" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.setTclVersion(.v9_1);
+    try it.allow(@backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".zig-cache");
+    try std.testing.expectEqualStrings("/ /a/b a/~", try it.str(try it.eval("list [file home] [file tildeexpand ~/a/b] [file tildeexpand a/~]")));
+    try std.testing.expectError(error.TclError, it.eval("file home nosuchuserx"));
+    try std.testing.expectEqualStrings("user \"nosuchuserx\" doesn't exist", try it.str(it.result));
+    try std.testing.expectEqualStrings("TCL VALUE PATH NOUSER", try it.str(it.error_code));
+    try std.testing.expectEqualStrings("1 1 1", try it.str(try it.eval("set d [file tempdir]; set r [list [file isdirectory $d] [string match /tmp/tcl_?????? $d] [string match /tmp/x_?????? [set e [file tempdir x]]]]; file delete $d $e; set r")));
+    try it.setTclVersion(.v8_6);
+    try std.testing.expectError(error.TclError, it.eval("file home"));
+    try std.testing.expect(std.mem.startsWith(u8, try it.str(it.result), "unknown or ambiguous subcommand \"home\""));
+}

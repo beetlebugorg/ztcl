@@ -18,7 +18,6 @@ command file {
     returns {The result of the subcommand.}
     see {open glob cd pwd {file channels} chan}
     difference {Links, the attributes of a file, and a new time with `atime` and `mtime` are errors in ztcl ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
-    difference {Tcl 9.0.4 has `file home`, `file tempdir`, and `file tildeexpand`, and ztcl has none of them ([issue 685](https://github.com/beetlebugorg/ztcl/issues/685)).}
     difference {Many errors have `-errorcode NONE` or a shorter code, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL WRONGARGS` or `TCL LOOKUP SUBCOMMAND` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     example {file join notes 2026 a.json} notes/2026/a.json
     example {file extension notes.json} .json
@@ -27,7 +26,8 @@ command file {
         file isdirectory data
     } 1
     example {file normalize a/../b/./c} /b/c -note {In the root folder, / is the root folder.}
-    error {file bogus} {unknown or ambiguous subcommand "bogus": must be atime, attributes, channels, copy, delete, dirname, executable, exists, extension, isdirectory, isfile, join, link, lstat, mkdir, mtime, nativename, normalize, owned, pathtype, readable, readlink, rename, rootname, separator, size, split, stat, system, tail, tempfile, type, volumes, or writable} {TCL LOOKUP INDEX subcommand}
+    error {file bogus} {unknown or ambiguous subcommand "bogus": must be atime, attributes, channels, copy, delete, dirname, executable, exists, extension, isdirectory, isfile, join, link, lstat, mkdir, mtime, nativename, normalize, owned, pathtype, readable, readlink, rename, rootname, separator, size, split, stat, system, tail, tempfile, type, volumes, or writable} {TCL LOOKUP INDEX subcommand} -tcl 8.6
+    error {file bogus} {unknown or ambiguous subcommand "bogus": must be atime, attributes, channels, copy, delete, dirname, executable, exists, extension, home, isdirectory, isfile, join, link, lstat, mkdir, mtime, nativename, normalize, owned, pathtype, readable, readlink, rename, rootname, separator, size, split, stat, system, tail, tempdir, tempfile, tildeexpand, type, volumes, or writable} {TCL LOOKUP INDEX subcommand} -tcl 9.1
     error {file normalize ../../x} {couldn't access "../../x": permission denied} {POSIX EACCES {permission denied}} -note {A path that leaves the root folder.}
 
     subcommand join {
@@ -691,6 +691,73 @@ command file {
         }
         example {catch {file readlink n.txt}} 1
         error {file readlink n.txt} {could not readlink: links are not available in the root folder} {POSIX EACCES {permission denied}}
+    }
+
+    subcommand home {
+        synopsis {file home ?USER?}
+        summary {Gives the home folder of the current user or of USER.}
+        description {
+            Gives the home folder of the current user, or of the user USER. In host mode the current user has the folder of `$env(HOME)`, and on Linux the folder of the user ID in `/etc/passwd` when `env(HOME)` is not set. Another user has the folder of `/etc/passwd`. In the root folder the home folder of the current user is `/`, and no other user has one.
+        }
+        returns {The path of the folder.}
+        tcl 9.1
+        see {{file tildeexpand} {file tempdir}}
+        argument USER {
+            type string
+            optional
+            summary {The name of a user.}
+        }
+        example {file pathtype [file home]} absolute
+        error {file home nosuchuserx} {user "nosuchuserx" doesn't exist} {TCL VALUE PATH NOUSER}
+        error {file home a b} {wrong # args: should be "file home ?user?"} {TCL WRONGARGS}
+    }
+
+    subcommand tildeexpand {
+        synopsis {file tildeexpand NAME}
+        summary {Replaces a leading ~ of a path with a home folder.}
+        description {
+            Gives NAME with a leading `~` replaced by the home folder of the current user, and a leading `~USER` by the home folder of USER, as `file home` gives them. A path with no leading `~` stays as it is.
+        }
+        returns {The path.}
+        tcl 9.1
+        see {{file home} {file normalize}}
+        argument NAME {
+            type path
+            summary {The path.}
+        }
+        example {expr {[file tildeexpand ~/notes] eq [file join [file home] notes]}} 1
+        example {file tildeexpand a/~} a/~
+        error {file tildeexpand ~nosuchuserx/a} {user "nosuchuserx" doesn't exist} {TCL VALUE PATH NOUSER}
+        error {file tildeexpand} {wrong # args: should be "file tildeexpand name"} {TCL WRONGARGS}
+    }
+
+    subcommand tempdir {
+        synopsis {file tempdir ?TEMPLATE?}
+        summary {Makes a new temporary folder and gives its path.}
+        description {
+            Makes a new empty folder with mode 0700 and gives its absolute path. The name is the base name of TEMPLATE, or `tcl`, with `_` and 6 random letters and digits, such as `tcl_Q3SEM5`. A TEMPLATE with a `/` names the folder of the new folder, and a TEMPLATE that ends with `/` is only that folder. With no folder in TEMPLATE, the new folder goes in `$env(TMPDIR)` or `/tmp` in host mode (`$env(TEMP)` or `$env(TMP)` on Windows), and in `/tmp` of the root folder, which `file tempdir` makes when it is not there. The folder stays: delete it with `file delete`.
+        }
+        returns {The path of the new folder.}
+        tcl 9.1
+        see {{file tempfile} {file mkdir} {file delete}}
+        argument TEMPLATE {
+            type path
+            optional
+            summary {The base name, the folder, or both, of the new folder.}
+        }
+        example {
+            set d [file tempdir]
+            set r [list [file isdirectory $d] [string match tcl_?????? [file tail $d]]]
+            file delete $d
+            set r
+        } {1 1}
+        example {
+            set d [file tempdir work]
+            set r [string match work_?????? [file tail $d]]
+            file delete $d
+            set r
+        } 1
+        error {file tempdir a b} {wrong # args: should be "file tempdir ?template?"} {TCL WRONGARGS}
     }
 
     subcommand tempfile {
