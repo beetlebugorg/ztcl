@@ -19,7 +19,7 @@ command file {
     see {open glob cd pwd {file channels} chan}
     difference {Links, the attributes of a file, and a new time with `atime` and `mtime` are errors in ztcl ([issue 687](https://github.com/beetlebugorg/ztcl/issues/687)).}
     difference {Tcl 9.0.4 has `file home`, `file tempdir`, and `file tildeexpand`, and ztcl has none of them ([issue 685](https://github.com/beetlebugorg/ztcl/issues/685)).}
-    difference {Many errors have `-errorcode NONE` or a shorter code, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL WRONGARGS` or `TCL LOOKUP SUBCOMMAND` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {Many errors have `-errorcode NONE` or a shorter code, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL WRONGARGS` or `TCL LOOKUP SUBCOMMAND` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     example {file join notes 2026 a.json} notes/2026/a.json
     example {file extension notes.json} .json
     example {

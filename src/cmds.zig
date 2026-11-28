@@ -141,11 +141,11 @@ fn cmdUnset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 pub fn cmdIncr(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("incr varName ?increment?");
     const name = try it.str(argv[1]);
-    const by: Value = if (argv.len == 3) expr.intArg(it, argv[2]) catch |e| {
+    const by: Value = if (argv.len == 3) expr.incrArg(it, argv[2]) catch |e| {
         if (e == error.TclError) it.startContext("\n    (reading increment)", .{});
         return e;
     } else .{ .int = 1 };
-    const cur: Value = if (try it.getVarOpt(name)) |v| try expr.intArg(it, v) else .{ .int = 0 };
+    const cur: Value = if (try it.getVarOpt(name)) |v| try expr.incrArg(it, v) else .{ .int = 0 };
     const out = try expr.addInts(it, cur, by);
     try it.setVar(name, out);
     return out;
@@ -1462,12 +1462,12 @@ pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
         base = @as(i64, @intCast(len)) - 1;
         rest = t[word..];
         if (rest.len == 0) return base;
-        if (rest[0] != '+' and rest[0] != '-') return it.fail(bad, .{s});
+        if (rest[0] != '+' and rest[0] != '-') return it.failCode("TCL VALUE INDEX", bad, .{s});
     } else {
         // The first sign after the first character starts the offset.
         var i: usize = 1;
         while (i < t.len and t[i] != '+' and t[i] != '-') i += 1;
-        if (t.len == 0) return it.fail(bad, .{s});
+        if (t.len == 0) return it.failCode("TCL VALUE INDEX", bad, .{s});
         base = indexInt(t[0..@min(i, t.len)]) orelse return badIndex(it, s, t[0..@min(i, t.len)]);
         rest = t[@min(i, t.len)..];
         if (rest.len == 0) return base;
@@ -1512,8 +1512,8 @@ fn badIndex(it: *Interp, s: []const u8, part: []const u8) Error {
         }
         octal = octal and high;
     }
-    if (octal) return it.fail("bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer? (looks like invalid octal number)", .{s});
-    return it.fail("bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer?", .{s});
+    if (octal) return it.failCode("TCL VALUE INDEX", "bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer? (looks like invalid octal number)", .{s});
+    return it.failCode("TCL VALUE INDEX", "bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer?", .{s});
 }
 
 pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -2177,7 +2177,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const args = argv[2..];
     const Sub = enum { bytelength, length, index, insert, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
     const which = siteSub(Sub, &cmdString, argv, cmd) orelse blk: {
-        const w = try @import("tcl9.zig").pick(it, Sub, sub, .{ .v8_6 = &.{.bytelength}, .v9_1 = &.{.insert} });
+        const w = try @import("tcl9.zig").pick(it, Sub, sub, .{ .v8_6 = &.{.bytelength}, .v9_1 = &.{.insert}, .code = "TCL LOOKUP SUBCOMMAND" });
         noteSub(Sub, &cmdString, argv, cmd, w);
         break :blk w;
     };
@@ -2250,7 +2250,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                     const big = try expr.intArg(it, args[i]);
                     if (big != .int) return it.fail("integer value too large to represent", .{});
                     if (big.int >= 0) limit = @intCast(big.int);
-                } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase or -length", .{o});
+                } else return it.failWord("TCL LOOKUP INDEX option", o, "bad option \"{s}\": must be -nocase or -length", .{o});
             }
             const o = compareStrings(try it.str(args[args.len - 2]), try it.str(args[args.len - 1]), nocase, limit);
             if (which == .equal) return .{ .int = @intFromBool(o == .eq) };
@@ -2294,11 +2294,11 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (args.len != 2 and args.len != 3) return it.wrongArgs("string map ?-nocase? charMap string");
             if (args.len == 3) {
                 const o = try it.str(args[0]);
-                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase", .{o});
+                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failWord("TCL LOOKUP INDEX option", o, "bad option \"{s}\": must be -nocase", .{o});
                 nocase = true;
             }
             const pairs = try it.list(args[args.len - 2]);
-            if (pairs.len % 2 != 0) return it.fail("char map list unbalanced", .{});
+            if (pairs.len % 2 != 0) return it.failCode("TCL OPERATION MAP UNBALANCED", "char map list unbalanced", .{});
             const s = try it.str(args[args.len - 1]);
             const keys = try a.alloc([]const u8, pairs.len);
             for (pairs, keys) |p, *k| k.* = try it.str(p);
@@ -2363,7 +2363,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .str = out.items };
         },
         .tolower, .toupper, .totitle => {
-            if (args.len < 1 or args.len > 3) return it.fail("wrong # args: should be \"string {s} string ?first? ?last?\"", .{@tagName(which)});
+            if (args.len < 1 or args.len > 3) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"string {s} string ?first? ?last?\"", .{@tagName(which)});
             const s = try it.str(args[0]);
             const n = charCountOf(it, s);
             var first: i64 = 0;
@@ -2395,7 +2395,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .str = out.items };
         },
         .trim, .trimleft, .trimright => {
-            if (args.len != 1 and args.len != 2) return it.fail("wrong # args: should be \"string {s} string ?chars?\"", .{@tagName(which)});
+            if (args.len != 1 and args.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"string {s} string ?chars?\"", .{@tagName(which)});
             const s = try it.str(args[0]);
             const chars: ?[]const u8 = if (args.len == 2) try it.str(args[1]) else null;
             return .{ .str = try trimChars(it, s, chars, which != .trimright, which != .trimleft) };
@@ -2445,7 +2445,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (args.len != 2 and args.len != 3) return it.wrongArgs("string match ?-nocase? pattern string");
             if (args.len == 3) {
                 const o = try it.str(args[0]);
-                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase", .{o});
+                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failWord("TCL LOOKUP INDEX option", o, "bad option \"{s}\": must be -nocase", .{o});
                 nocase = true;
             }
             var pat = try it.str(args[args.len - 2]);
@@ -2570,9 +2570,7 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
             if (i == classes.len - 1) try msg.appendSlice(a, "or ");
             try msg.appendSlice(a, c);
         }
-        it.result = .{ .str = msg.items };
-        it.error_code = .{ .str = "TCL LOOKUP INDEX class" };
-        return error.TclError;
+        return it.failWord("TCL LOOKUP INDEX class", word, "{s}", .{msg.items});
     }
     const cl = class.?;
     var strict = false;
@@ -2583,10 +2581,10 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
         if (o.len >= 2 and std.mem.startsWith(u8, "-strict", o)) {
             strict = true;
         } else if (o.len >= 2 and std.mem.startsWith(u8, "-failindex", o)) {
-            if (oi + 2 >= args.len) return it.fail("wrong # args: should be \"string is {s} ?-strict? ?-failindex var? str\"", .{cl});
+            if (oi + 2 >= args.len) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"string is {s} ?-strict? ?-failindex var? str\"", .{cl});
             oi += 1;
             fail_var = args[oi];
-        } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -strict or -failindex", .{o});
+        } else return it.failWord("TCL LOOKUP INDEX option", o, "bad option \"{s}\": must be -strict or -failindex", .{o});
     }
     const v = args[args.len - 1];
     const s = try it.str(v);

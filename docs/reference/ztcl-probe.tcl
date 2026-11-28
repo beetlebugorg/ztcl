@@ -82,7 +82,7 @@ command ztcl::probe {
                 set r [lindex [ztcl::probe records -probe $p] 0]
                 list [dict get $r kind] [dict get $r line] [dict get $r values]
             } {line 3 {x aa}}
-            error {ztcl::probe add -proc f -line x} {expected integer but got "x"} NONE
+            error {ztcl::probe add -proc f -line x} {expected integer but got "x"} {TCL VALUE NUMBER}
             error {ztcl::probe add -proc f -line -1} {-line must be 0 or more} NONE
         }
         option -command {
@@ -220,7 +220,7 @@ command ztcl::probe {
                 f 1; f 2; f 3
                 list [llength [ztcl::probe records -probe $p]] [dict get [lindex [ztcl::probe list] end] dropped]
             } {2 1}
-            error {ztcl::probe add -proc f -count x} {expected integer but got "x"} NONE
+            error {ztcl::probe add -proc f -count x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -every {
             value N
@@ -232,7 +232,7 @@ command ztcl::probe {
                 f 1; f 2; f 3; f 4
                 lmap r [ztcl::probe records -probe $p] {dict get $r words}
             } {{g 1} {g 3}}
-            error {ztcl::probe add -proc f -every x} {expected integer but got "x"} NONE
+            error {ztcl::probe add -proc f -every x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -rate {
             value {{N UNITS}}
@@ -297,7 +297,7 @@ command ztcl::probe {
                 set s [dict get [lindex [ztcl::probe records -probe $p] 1] seq]
                 lmap r [ztcl::probe records -probe $p -since $s] {dict get $r values n}
             } {2 3}
-            error {ztcl::probe records -since x} {expected integer but got "x"} NONE
+            error {ztcl::probe records -since x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -where {
             value EXPR
@@ -321,7 +321,7 @@ command ztcl::probe {
                 g 1; g 2; g 3
                 lmap r [ztcl::probe records -probe $p -first 2] {dict get $r values n}
             } {1 2}
-            error {ztcl::probe records -first x} {expected integer but got "x"} NONE
+            error {ztcl::probe records -first x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -last {
             value N
@@ -333,7 +333,7 @@ command ztcl::probe {
                 g 1; g 2; g 3
                 lmap r [ztcl::probe records -probe $p -last 1] {dict get $r values n}
             } 3
-            error {ztcl::probe records -last x} {expected integer but got "x"} NONE
+            error {ztcl::probe records -last x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -json {
             type flag
@@ -439,7 +439,7 @@ command ztcl::probe {
                 dict get [ztcl::probe configure] -budget
             } 500
             error {ztcl::probe configure -budget 0} {-budget must be 1 or more} NONE
-            error {ztcl::probe configure -budget x} {expected integer but got "x"} NONE
+            error {ztcl::probe configure -budget x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -maxlen {
             value N

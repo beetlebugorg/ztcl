@@ -60,7 +60,7 @@ command ztcl::vt {
             error {ztcl::vt new -size {0 5}} {the size 0 is outside 1 to 4096} {ZTCL VT SIZE}
             error {ztcl::vt new -size {5000 5}} {the size 5000 is outside 1 to 4096} {ZTCL VT SIZE}
             error {ztcl::vt new -size 5} {the size must be a list of cols and rows} {ZTCL VT SIZE}
-            error {ztcl::vt new -size {a b}} {expected integer but got "a"} NONE
+            error {ztcl::vt new -size {a b}} {expected integer but got "a"} {TCL VALUE NUMBER}
             error {ztcl::vt new -size} {wrong # args: should be "ztcl::vt new ?-size {cols rows}? ?-scrollback lines?"} {TCL WRONGARGS}
         }
         option -scrollback {
@@ -78,7 +78,7 @@ command ztcl::vt {
             } b
             error {ztcl::vt new -scrollback -1} {the scrollback -1 is outside 0 to 1000000} {ZTCL VT SCROLLBACK}
             error {ztcl::vt new -scrollback 1000001} {the scrollback 1000001 is outside 0 to 1000000} {ZTCL VT SCROLLBACK}
-            error {ztcl::vt new -scrollback x} {expected integer but got "x"} NONE
+            error {ztcl::vt new -scrollback x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
     }
 
@@ -159,7 +159,7 @@ command ztcl::vt {
             set r
         } {{5 2} {three {}} 2}
         error {ztcl::vt resize $vt 0 2} {the size 0 is outside 1 to 4096} {ZTCL VT SIZE}
-        error {ztcl::vt resize $vt a 2} {expected integer but got "a"} NONE
+        error {ztcl::vt resize $vt a 2} {expected integer but got "a"} {TCL VALUE NUMBER}
         error {ztcl::vt resize $vt 10} {wrong # args: should be "ztcl::vt resize handle cols rows"} {TCL WRONGARGS}
     }
 
@@ -286,7 +286,7 @@ command ztcl::vt {
         } {{one two} {}}
         error {ztcl::vt rows vt99} {can not find terminal "vt99"} {ZTCL VT HANDLE}
         error {ztcl::vt rows $vt 0 1 2} {wrong # args: should be "ztcl::vt rows|cells handle ?first? ?last?"} {TCL WRONGARGS}
-        error {ztcl::vt rows $vt end} {expected integer but got "end"} NONE
+        error {ztcl::vt rows $vt end} {expected integer but got "end"} {TCL VALUE NUMBER}
     }
 
     subcommand cells {

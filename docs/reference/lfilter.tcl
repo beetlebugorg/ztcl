@@ -34,7 +34,7 @@ command lfilter {
     example {lfilter x {1 2} y {3 4} {expr {$y > 3}}} 2
     example {lfilter x {1 2 3} {if {$x == 2} continue; expr 1}} {1 3}
     example {lfilter x {} {expr 1}} {}
-    error {lfilter x {1 2} {expr {"x"}}} {expected boolean value but got "x"} NONE
+    error {lfilter x {1 2} {expr {"x"}}} {expected boolean value but got "x"} {TCL VALUE NUMBER}
     error {lfilter {} {1} {expr 1}} {lfilter varlist is empty} NONE
     error {lfilter x {1}} {wrong # args: should be "lfilter varList list ?varList list ...? command"} {TCL WRONGARGS}
 }

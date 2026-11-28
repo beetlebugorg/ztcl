@@ -14,7 +14,7 @@ command ledit {
     }
     returns {The new value of VAR.}
     see {lreplace lset linsert}
-    difference {A bad index and a variable with no value have `-errorcode NONE`, where Tcl 9.0.4 gives `TCL VALUE INDEX` and `TCL LOOKUP VARNAME` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
+    difference {A variable with no value has `-errorcode NONE`, where Tcl 9.0.4 gives `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     argument VAR {
         type {variable name}
         summary {The variable with the list.}
@@ -52,7 +52,7 @@ command ledit {
     error {
         set l {a b}
         ledit l x 1
-    } {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} NONE
+    } {bad index "x": must be integer?[+-]integer? or end?[+-]integer?} {TCL VALUE INDEX}
     error {
         unset -nocomplain nv
         ledit nv 0 0 a

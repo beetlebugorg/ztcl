@@ -160,7 +160,7 @@ fn pairs(it: *Interp, v: Value) Error![]Value {
         return out[0..v.list.len];
     }
     const items = it.list(v) catch |e| return dictListError(it, e);
-    if (items.len % 2 != 0) return it.fail("missing value to go with key", .{});
+    if (items.len % 2 != 0) return it.failCode("TCL VALUE DICTIONARY", "missing value to go with key", .{});
     if (items.len >= index_min) return pairsLarge(it, items);
     var out: std.ArrayList(Value) = .empty;
     try out.ensureTotalCapacity(it.alloc(), items.len + 2);
@@ -480,7 +480,8 @@ fn unsetIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     const items = try pairs(it, d);
     const at = try lookup(it, d, items, keys[0]) orelse {
         if (keys.len == 1) return wrapDict(it, items);
-        return it.fail("key \"{s}\" not known in dictionary", .{try it.str(keys[0])});
+        const k = try it.str(keys[0]);
+        return it.failWord("TCL LOOKUP DICT", k, "key \"{s}\" not known in dictionary", .{k});
     };
     if (keys.len > 1) {
         items[at + 1] = try unsetIn(it, items[at + 1], keys[1..]);
@@ -495,7 +496,7 @@ fn getIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     for (keys) |k| {
         const items = try readPairs(it, cur);
         const at = try lookup(it, cur, items, k) orelse
-            return it.fail("key \"{s}\" not known in dictionary", .{try it.str(k)});
+            return it.failWord("TCL LOOKUP DICT", try it.str(k), "key \"{s}\" not known in dictionary", .{try it.str(k)});
         cur = items[at + 1];
     }
     return cur;
@@ -582,7 +583,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
     const a = it.alloc();
     const args = argv[2..];
     if (it.tcl9() and (eql(name, "getdef") or eql(name, "getwithdefault"))) {
-        if (args.len < 3) return it.fail("wrong # args: should be \"dict {s} dictionary ?key ...? key default\"", .{name});
+        if (args.len < 3) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"dict {s} dictionary ?key ...? key default\"", .{name});
         var cur = args[0];
         for (args[1 .. args.len - 1]) |k| {
             const items = try readPairs(it, cur);
@@ -617,7 +618,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
     if (eql(name, "map")) {
         if (args.len != 3) return it.wrongArgs("dict map {{keyVarName valueVarName}} dictionary script");
         const names = try it.list(args[0]);
-        if (names.len != 2) return it.fail("must have exactly two variable names", .{});
+        if (names.len != 2) return it.failCode("TCL SYNTAX dict map", "must have exactly two variable names", .{});
         const items = try pairs(it, args[1]);
         const body = try it.scriptOf(argv, 4, cmd);
         var out: std.ArrayList(Value) = .empty;
@@ -656,10 +657,10 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
             }
             return try value.wrapList(a, out.items);
         }
-        if (kind.len == 0 or !std.mem.startsWith(u8, "script", kind)) return it.fail("bad filterType \"{s}\": must be key, script, or value", .{kind});
+        if (kind.len == 0 or !std.mem.startsWith(u8, "script", kind)) return it.failWord("TCL LOOKUP INDEX filterType", kind, "bad filterType \"{s}\": must be key, script, or value", .{kind});
         if (args.len != 4) return it.wrongArgs("dict filter dictionary script {{keyVarName valueVarName}} filterScript");
         const names = try it.list(args[2]);
-        if (names.len != 2) return it.fail("must have exactly two variable names", .{});
+        if (names.len != 2) return it.failCode("TCL SYNTAX dict filter", "must have exactly two variable names", .{});
         const body = try it.scriptOf(argv, 5, cmd);
         var i: usize = 0;
         while (i < items.len) : (i += 2) {
@@ -744,8 +745,8 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         if (try dictMore(it, name, argv, cmd)) |v| return v;
     }
     const sub = common orelse {
-        if (it.tcl9()) return it.fail("unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, getdef, getwithdefault, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
-        return it.fail("unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
+        if (it.tcl9()) return it.failWord("TCL LOOKUP SUBCOMMAND", name, "unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, getdef, getwithdefault, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
+        return it.failWord("TCL LOOKUP SUBCOMMAND", name, "unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
     };
     const args = argv[2..];
     switch (sub) {
@@ -809,7 +810,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             return out;
         },
         .keys, .values => {
-            if (args.len < 1 or args.len > 2) return it.fail("wrong # args: should be \"dict {s} dictionary ?pattern?\"", .{name});
+            if (args.len < 1 or args.len > 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"dict {s} dictionary ?pattern?\"", .{name});
             const items = try pairs(it, args[0]);
             const pattern: ?[]const u8 = if (args.len == 2) try it.str(args[1]) else null;
             var out: std.ArrayList(Value) = .empty;
@@ -828,7 +829,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         .@"for" => {
             if (args.len != 3) return it.wrongArgs("dict for {{keyVarName valueVarName}} dictionary script");
             const names = try it.list(args[0]);
-            if (names.len != 2) return it.fail("must have exactly two variable names", .{});
+            if (names.len != 2) return it.failCode("TCL SYNTAX dict for", "must have exactly two variable names", .{});
             const items = try pairs(it, args[1]);
             const body = try it.scriptOf(argv, 4, cmd);
             var i: usize = 0;
@@ -868,10 +869,12 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             var new: Value = undefined;
             switch (sub) {
                 .incr => {
-                    const by: Value = if (args.len == 3) try expr.intArg(it, args[2]) else .{ .int = 1 };
+                    // Tcl reads the step as a number when the key has a value
+                    // to add it to, and as an integer when the key is new.
+                    const by: Value = if (args.len != 3) .{ .int = 1 } else if (at != null) try expr.incrArg(it, args[2]) else try expr.intArg(it, args[2]);
                     // A new key gets the increment as written, as in Tcl:
                     // `dict incr d k 0x10` stores `0x10`.
-                    new = if (at) |_| try expr.addInts(it, try expr.intArg(it, old), by) else if (args.len == 3) args[2] else by;
+                    new = if (at) |_| try expr.addInts(it, try expr.incrArg(it, old), by) else if (args.len == 3) args[2] else by;
                 },
                 .lappend => {
                     var l = old.toList(a) catch |e| switch (e) {

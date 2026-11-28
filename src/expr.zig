@@ -509,7 +509,7 @@ pub fn truthy(it: *Interp, v: Value) Error!bool {
             if (bigint.isIntegerText(s)) return true;
             if (value.parseDouble(s)) |d| return d != 0;
             if (boolWord(s)) |b| return b;
-            return it.fail("expected boolean value but got \"{s}\"", .{s});
+            return it.failCode("TCL VALUE NUMBER", "expected boolean value but got \"{s}\"", .{s});
         },
     }
 }
@@ -546,7 +546,17 @@ pub fn numberForm(it: *Interp, v: Value) Error!Value {
 pub fn intArg(it: *Interp, v: Value) Error!Value {
     if (v == .int) return v;
     if (try numberOf(it, v)) |n| if (n != .double) return n;
-    return it.fail("expected integer but got \"{s}\"", .{try it.str(v)});
+    return it.failInt(v);
+}
+
+/// An integer operand of `incr` and `dict incr`. Tcl reads the value as
+/// a number first, so a double in text gives the code `TCL VALUE
+/// INTEGER` here, where `intArg` gives `TCL VALUE NUMBER`.
+pub fn incrArg(it: *Interp, v: Value) Error!Value {
+    if (v == .int) return v;
+    const n = try numberOf(it, v);
+    if (n) |x| if (x != .double) return x;
+    return it.failCode(if (n != null) "TCL VALUE INTEGER" else "TCL VALUE NUMBER", "expected integer but got \"{s}\"", .{try it.str(v)});
 }
 
 /// The sum of two integer arguments.
