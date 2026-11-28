@@ -1,27 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::pdf
-syn: ztcl::pdf subcommand ?arg ...?
-does: Makes a PDF document: pages, text in embedded TrueType fonts, rectangles, lines, images, links, named places, the outline, and the document information.
-sub: create ?-compress bool? | Makes a document and gives its handle.
-sub: font doc bytes | Adds a TrueType font and gives its number.
-sub: page doc ?width height? | Adds a page and gives its number. The default is A4.
-sub: text doc page font size x y string ?-color rgb? ?-ligatures bool? | Shows text and gives its width.
-sub: measure doc font size string | Gives the width of a string in points.
-sub: rect doc page x y width height ?-fill rgb? | Fills a rectangle.
-sub: line doc page x0 y0 x1 y1 ?-width w? ?-color rgb? | Strokes a line.
-sub: image doc bytes | Adds a PNG or JPEG image and gives {number width height}.
-sub: place doc page image x y width height | Shows an image in a rectangle.
-sub: link doc page x0 y0 x1 y1 -uri url|-dest name | Makes a rectangle a link.
-sub: dest doc name page x y | Names a place for a link.
-sub: outline doc title level page y | Adds an entry to the outline.
-sub: info doc key value | Sets the Title, Author, Subject, or Keywords.
-sub: bytes doc | Gives the bytes of the PDF file.
-sub: pages doc | Gives the count of pages.
-sub: delete doc | Frees the document.
-page: modules/pdf.md
-
 == ztcl::typeset
 syn: ztcl::typeset subcommand ?arg ...?
 does: Breaks paragraphs into lines with the total-fit algorithm of Knuth and Plass, hyphenates words with the patterns of Liang, measures text in TrueType fonts, and lays out Markdown into the pages of a PDF document.
