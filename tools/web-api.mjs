@@ -153,11 +153,18 @@ t.close();
 const runs = [];
 t = await Interp.create(host, { allow: ["web:serial"], web, webRoot, onEvents: (r) => runs.push(r) });
 const tick = () => new Promise((res) => setTimeout(res, 5));
+// Waits until cond() is true, for at most 10 s. A host under load can
+// run the promises and the timers of the page late, so a check waits for
+// its event, not for a fixed time. A timeout fails in the next check.
+const until = async (cond, ms = 10000) => {
+  const end = Date.now() + ms;
+  while (!cond() && Date.now() < end) await tick();
+};
 r = t.eval(`set s [web::root navigator.serial]
 proc got {what status value} {lappend ::got $what $status $value}
 web::call $s getPorts -command {got ports}`);
 check(r.ok && r.result === "", `-command gives an empty result (got ${r.result})`);
-await tick();
+await until(() => runs.length >= 1);
 r = t.eval("set got");
 check(r.ok && r.result === "ports ok web2", `a promise that resolves (got ${r.result})`);
 check(runs.length === 1 && runs[0].ok, "onEvents gets the run");
@@ -167,7 +174,7 @@ serial.requestPort = () => {
   return Promise.reject(e);
 };
 t.eval("set got {}; web::call $s requestPort {filters {{usbVendorId 9025}}} -command {got req}");
-await tick();
+await until(() => runs.length >= 2);
 r = t.eval("set got");
 check(r.ok && r.result === "req error {web: NotFoundError: No port selected by the user.}", `a promise that rejects (got ${r.result})`);
 r = t.eval("web::call web2 getInfo -command {got x}");
@@ -177,7 +184,7 @@ check(!r.ok && /expected integer/.test(r.result), `a bad argument fails at the c
 // Each script has its own compute limit.
 t.webComputeLimit = 1000;
 t.eval("web::call $s getPorts -command {apply {args {while 1 {}}}}");
-await tick();
+await until(() => runs.length >= 3);
 check(runs.length === 3 && !runs[2].ok && /compute limit/.test(runs[2].result), `the compute limit of a script (got ${JSON.stringify(runs[2])})`);
 r = t.eval("set got");
 check(r.ok, "the interpreter runs after the limit");
@@ -195,7 +202,7 @@ const connect = (detail) => {
   serial.dispatchEvent(e);
 };
 connect(7);
-await tick();
+await until(() => t.eval("set seen").result !== "");
 r = t.eval("set seen");
 check(r.ok && r.result === "connect web2 1 7", `a connect event (got ${r.result})`);
 r = t.eval("web::on $s message {puts x}");
@@ -273,10 +280,10 @@ const m115 = fs.readFileSync(new URL("../src/serial_testdata/m115.tcl", import.m
 t = await Interp.create(host, { allow: ["web:serial", "event"], web, webRoot: { navigator: { serial: serial2 } } });
 r = t.eval(m115 + "\nweb::serial::request -filters {{usbVendorId 9025}} -command {apply {{status name} {set ::port $name}}}");
 check(r.ok, `web::serial::request (got ${r.result})`);
-await tick();
+await until(() => t.eval("info exists ::port").result === "1");
 r = t.eval("set f [open $::port r+]; m115 $f; set f");
 check(r.ok && r.result === "serial0", `open of the port (got ${r.result})`);
-for (let i = 0; i < 20 && t.eval("set ::done").result === "0"; i++) await tick();
+await until(() => t.eval("set ::done").result !== "0");
 r = t.eval("list $::done $::reply [fconfigure $f -mode]");
 check(r.ok && r.result === "1 {{FIRMWARE_NAME:Marlin 2.1.2} ok} 115200,n,8,1", `the M115 reply (got ${r.result})`);
 check(printer.written === "M115\n" && printer.opened.baudRate === 115200 && printer.opened.parity === "none", `the write and the open options (got ${JSON.stringify([printer.written, printer.opened])})`);
@@ -285,10 +292,10 @@ check(r.result === "bad value for -mode parity: Web Serial has no mark or space 
 r = t.eval("catch {open $::port r+} m; set m");
 check(/the port is open/.test(r.result), `a second open (got ${r.result})`);
 r = t.eval("close $f");
-await tick();
+await until(() => printer.closed);
 check(r.ok && printer.closed, "close closes the port");
 r = t.eval("web::serial::ports -command {apply {{status names} {set ::names $names}}}");
-await tick();
+await until(() => t.eval("info exists ::names").result === "1");
 check(t.eval("set ::names").result === "webserial1", `web::serial::ports (got ${t.eval("set ::names").result})`);
 t.close();
 t = await Interp.create(host, { allow: ["web:usb"], web, webRoot: { navigator: { serial: serial2 } } });
@@ -330,7 +337,7 @@ t = await Interp.create(host, { allow: ["dom", "event", "web:serial"], web, domR
 r = t.eval(demo);
 check(r.ok, `the demo script (got ${r.result})`);
 go.dispatchEvent(new Event("click"));
-for (let i = 0; i < 20 && !out.textContent.includes("ok"); i++) await tick();
+await until(() => out.textContent.includes("ok") && printer2.closed);
 check(out.textContent === "> M115\nFIRMWARE_NAME:Marlin 2.1.2\nok\n", `the demo output (got ${JSON.stringify(out.textContent)})`);
 check(printer2.opened?.baudRate === 250000 && printer2.closed, "the demo opens at the baud of the page and closes the port");
 t.close();
