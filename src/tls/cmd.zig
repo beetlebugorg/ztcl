@@ -112,7 +112,9 @@ const Tls = struct {
 
     /// The error of a failed TLS step. The error code is `ZTCL TLS
     /// CERTIFICATE reason`, `ZTCL TLS ALERT name` for an alert of the
-    /// server, or `ZTCL TLS error alert` for an error of the client.
+    /// server, `ZTCL TLS EOF` for the end of the stream in the
+    /// handshake, or `ZTCL TLS ERROR alert` for an error of the client,
+    /// with the alert that it sent or `none`.
     fn tlsError(t: *Tls, it: *Interp, e: anyerror) Error {
         const a = it.alloc();
         if (t.c.chain_error) |ce| {
@@ -129,8 +131,9 @@ const Tls = struct {
             const name = if (std.enums.fromInt(record.Alert, code)) |al| @tagName(al) else "unknown";
             return it.failCode(try std.fmt.allocPrint(a, "ZTCL TLS ALERT {s}", .{name}), "TLS error: the server sent the alert {s} ({d})", .{ name, code });
         }
+        if (e == error.EndOfStream) return it.failCode("ZTCL TLS EOF", "TLS error: the server closed the connection in the handshake", .{});
         const alert = if (t.c.sent_alert) |al| @tagName(al) else "none";
-        return it.failCode(try std.fmt.allocPrint(a, "ZTCL TLS {t} {s}", .{ e, alert }), "TLS error: {t} (alert {s})", .{ e, alert });
+        return it.failCode(try std.fmt.allocPrint(a, "ZTCL TLS ERROR {s}", .{alert}), "TLS error: {t} (alert {s})", .{ e, alert });
     }
 
     /// Reads to one whole record in `raw`. Gives false at the end of
@@ -139,7 +142,19 @@ const Tls = struct {
         while (true) {
             if (t.raw_len >= record.header_len) {
                 const len = std.mem.readInt(u16, t.raw[3..5], .big);
-                if (len > record.max_ciphertext) return t.tlsError(it, error.RecordOverflow);
+                // RFC 8446 section 5: a record of an unknown content
+                // type gets `unexpected_message`, and a record longer
+                // than 2^14 + 256 bytes gets `record_overflow`. The type
+                // is checked first, so data that is no TLS, such as an
+                // HTTP reply, gets `unexpected_message`.
+                const ct = t.raw[0];
+                const bad: ?record.Alert = if (ct < 20 or ct > 23) .unexpected_message else if (len > record.max_ciphertext) .record_overflow else null;
+                if (bad) |al| {
+                    var w: std.Io.Writer = .fixed(&t.out);
+                    t.c.reject(&w, al) catch {};
+                    sendAll(it, fd, w.buffered()) catch {};
+                    return t.tlsError(it, if (al == .unexpected_message) error.UnexpectedMessage else error.RecordOverflow);
+                }
                 if (t.raw_len >= record.header_len + len) return true;
             }
             switch (sys.read(fd, t.raw[t.raw_len..])) {

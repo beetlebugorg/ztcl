@@ -396,6 +396,12 @@ pub const Client = struct {
         return error.AlertSent;
     }
 
+    /// Sends the fatal alert `a` for a record that the caller found
+    /// wrong before `handleRecord`, and gives `error.AlertSent`.
+    pub fn reject(c: *Client, w: *Writer, a: Alert) Error {
+        return c.fail(w, a);
+    }
+
     /// Handles one whole record of the server.
     pub fn handleRecord(c: *Client, w: *Writer, rec: []const u8) Error!Event {
         switch (c.state) {
